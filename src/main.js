@@ -121,6 +121,9 @@ function watchTitle(s, data) {
 }
 
 function setStatus(s, status, detail) {
+  // A closed session's pty still exits afterwards; an update for it would make
+  // the renderer adopt it as a session being created.
+  if (sessions.get(s.id) !== s) return
   const changed = s.status !== status
   s.status = status
   s.detail = detail
