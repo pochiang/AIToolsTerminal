@@ -402,7 +402,9 @@ $('status-groups').addEventListener('click', e => {
     return
   }
   const c = e.target.closest('.card')
-  if (c) select(c.dataset.id)
+  if (!c) return
+  if (state.sessions.get(c.dataset.id)?.status === 'done') api.ack(c.dataset.id)
+  select(c.dataset.id)
 })
 
 // ---------- rename ----------

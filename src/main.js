@@ -539,6 +539,15 @@ ipcMain.on('session:rename', (_e, id, name) => {
   s.customTitle = String(name || '').trim().slice(0, 80) || null
   send('session:update', publicSession(s))
 })
+// Clicking a finished card marks it seen: back to waiting, with no notification.
+ipcMain.on('session:ack', (_e, id) => {
+  const s = sessions.get(id)
+  if (!s || s.status !== 'done') return
+  s.status = 'waiting'
+  s.detail = ''
+  s.since = Date.now()
+  send('session:update', publicSession(s))
+})
 ipcMain.on('session:active', (_e, id) => {
   activeId = id
 })

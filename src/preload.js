@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('aitt', {
   input: (id, data) => ipcRenderer.send('session:input', id, data),
   resize: (id, cols, rows) => ipcRenderer.send('session:resize', id, cols, rows),
   rename: (id, name) => ipcRenderer.send('session:rename', id, name),
+  ack: id => ipcRenderer.send('session:ack', id),
   setActive: id => ipcRenderer.send('session:active', id),
   close: id => ipcRenderer.send('session:close', id),
   pickDir: () => ipcRenderer.invoke('dir:pick'),

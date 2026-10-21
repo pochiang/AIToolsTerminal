@@ -318,6 +318,9 @@ code { font-family: var(--mono); color: var(--text); }
 .card.codex { border-left-color: var(--codex); background: var(--codex-tint); }
 .card.claude.selected { background: var(--claude-tint-strong); }
 .card.codex.selected { background: var(--codex-tint-strong); }
+/* A finished card glows green until clicked; the AI edge color stays. */
+.card.done, .card.done.selected { background: rgba(63, 185, 80, .14); animation: done-glow 1.8s ease-in-out infinite; }
+@keyframes done-glow { 50% { background: rgba(63, 185, 80, .26); } }
 .card-head { display: flex; align-items: center; gap: 6px; }
 .card-head .kind.claude { color: var(--claude); }
 .card-head .kind.codex { color: var(--codex); }
