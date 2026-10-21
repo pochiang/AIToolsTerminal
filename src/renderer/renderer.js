@@ -510,10 +510,10 @@ const ROW_H = 24
 const MAX_LANES = 10
 const LANE_COLORS = ['#4f9cff', '#e07a5f', '#a99bff', '#3fb950', '#f5b942', '#7dcfff', '#f778ba', '#c9d1d9']
 
-/** The folder the panel follows: the active tab's, else the chosen one. */
+/** The folder the panel follows: the active tab's; none without a tab. */
 function gitCwd() {
   const s = state.active && state.sessions.get(state.active)
-  return s?.cwd || state.config.cwd
+  return s?.cwd || null
 }
 
 async function refreshGit(force) {
@@ -523,9 +523,19 @@ async function refreshGit(force) {
     return gitState.busy
   }
   const cwd = gitCwd()
-  if (!cwd) return
+  if (!cwd) {
+    if (gitState.data) {
+      gitState.cwd = null
+      gitState.sig = ''
+      gitState.data = null
+      renderGit()
+    }
+    return
+  }
   gitState.busy = (async () => {
     const data = await api.readGit(cwd)
+    // The tab may have closed or switched while reading.
+    if (gitCwd() !== cwd) return
     const sig = cwd + JSON.stringify(data)
     if (force || sig !== gitState.sig) {
       gitState.sig = sig
