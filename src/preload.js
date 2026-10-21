@@ -1,0 +1,34 @@
+const { contextBridge, ipcRenderer } = require('electron')
+
+const on = channel => cb => ipcRenderer.on(channel, (_e, ...args) => cb(...args))
+
+contextBridge.exposeInMainWorld('aitt', {
+  init: () => ipcRenderer.invoke('app:init'),
+  createSession: (kind, cwd, cols, rows) => ipcRenderer.invoke('session:create', kind, cwd, cols, rows),
+  input: (id, data) => ipcRenderer.send('session:input', id, data),
+  resize: (id, cols, rows) => ipcRenderer.send('session:resize', id, cols, rows),
+  rename: (id, name) => ipcRenderer.send('session:rename', id, name),
+  setActive: id => ipcRenderer.send('session:active', id),
+  close: id => ipcRenderer.send('session:close', id),
+  pickDir: () => ipcRenderer.invoke('dir:pick'),
+  setDir: dir => ipcRenderer.invoke('dir:set', dir),
+  refreshUsage: () => ipcRenderer.send('usage:refresh'),
+  readGit: cwd => ipcRenderer.invoke('git:read', cwd),
+  gitWorkingDiff: (cwd, rel) => ipcRenderer.invoke('git:working-diff', cwd, rel),
+  gitShow: (cwd, hash) => ipcRenderer.invoke('git:show', cwd, hash),
+  gitCommit: (cwd, message, paths) => ipcRenderer.invoke('git:commit', cwd, message, paths),
+  gitPull: cwd => ipcRenderer.invoke('git:pull', cwd),
+  gitPush: cwd => ipcRenderer.invoke('git:push', cwd),
+  setCollab: next => ipcRenderer.invoke('collab:set', next),
+  stopCollab: () => ipcRenderer.send('collab:stop'),
+  onCollabEvent: on('collab:event'),
+  readClipboard: () => ipcRenderer.invoke('clipboard:read'),
+  terminalMenu: hasSelection => ipcRenderer.invoke('menu:terminal', hasSelection),
+  writeClipboard: text => ipcRenderer.send('clipboard:write', text),
+  onData: on('pty:data'),
+  onSessionUpdate: on('session:update'),
+  onSessionRemoved: on('session:removed'),
+  onSessionSelect: on('session:select'),
+  onUsage: on('usage:update'),
+  onUpdateState: on('update:state'),
+})

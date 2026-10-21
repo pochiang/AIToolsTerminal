@@ -1,0 +1,56 @@
+{
+  "name": "ai-tools-terminal",
+  "productName": "AI Tools Terminal",
+  "version": "0.1.0",
+  "description": "管理 Claude Code 與 Codex 的終端機：顯示用量、一鍵開新對話、即時工作狀態",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis"
+  },
+  "author": "gkkc6",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@lydell/node-pty": "^1.2.0-beta.15",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0"
+  },
+  "devDependencies": {
+    "electron": "^38.8.6",
+    "electron-builder": "^26.15.3"
+  },
+  "allowScripts": {
+    "electron@38.8.6": true
+  },
+  "build": {
+    "appId": "com.gkkc6.ai-tools-terminal",
+    "productName": "AI Tools Terminal",
+    "directories": { "output": "dist" },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "src/mcp-bridge.js",
+      "node_modules/@lydell/**"
+    ],
+    "npmRebuild": false,
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "AI Tools Terminal",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "artifactName": "AI-Tools-Terminal-Setup-${version}.exe"
+    }
+  }
+}
