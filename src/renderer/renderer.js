@@ -1094,4 +1094,5 @@ api.init().then(async ({ config, usage, updates, sessions }) => {
   const ids = []
   for (const tab of tabs) ids.push(await launch(tab.kind, tab))
   if (tabs.length) select(ids[config.activeTab] ?? state.active)
+  api.tabsRestored()
 })

@@ -31,6 +31,8 @@ const CODEX_SESSIONS = path.join(os.homedir(), '.codex', 'sessions')
 let win = null
 let hookPort = 0
 let activeId = null
+// While last launch's tabs are being reopened, don't overwrite the saved list with a partial one.
+let restoring = false
 let seq = 0
 const sessions = new Map()
 const usageState = { claude: { loading: true }, codex: { loading: true } }
@@ -47,6 +49,7 @@ function saveConfig() {
 }
 // Open tabs, so the next launch can reopen them and resume their conversations.
 function saveTabs() {
+  if (restoring) return
   const list = [...sessions.values()]
   config.tabs = list.map(s => ({ kind: s.kind, cwd: s.cwd, customTitle: s.customTitle, autoTitle: s.autoTitle, convId: s.convId }))
   config.activeTab = list.findIndex(s => s.id === activeId)
@@ -540,12 +543,19 @@ async function refreshCodex() {
 
 // ---------- IPC ----------
 
-ipcMain.handle('app:init', () => ({
-  config,
-  usage: usageState,
-  updates: updateState,
-  sessions: [...sessions.values()].map(publicSession),
-}))
+ipcMain.handle('app:init', () => {
+  restoring = !sessions.size && !!config.tabs?.length
+  return {
+    config,
+    usage: usageState,
+    updates: updateState,
+    sessions: [...sessions.values()].map(publicSession),
+  }
+})
+ipcMain.on('tabs:restored', () => {
+  restoring = false
+  saveTabs()
+})
 ipcMain.handle('session:create', async (_e, kind, cwd, cols, rows, restore) => {
   // Don't start a CLI while its update may be replacing the executable.
   await updating[kind]

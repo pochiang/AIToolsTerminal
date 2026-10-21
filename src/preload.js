@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('aitt', {
   resize: (id, cols, rows) => ipcRenderer.send('session:resize', id, cols, rows),
   rename: (id, name) => ipcRenderer.send('session:rename', id, name),
   ack: id => ipcRenderer.send('session:ack', id),
+  tabsRestored: () => ipcRenderer.send('tabs:restored'),
   setActive: id => ipcRenderer.send('session:active', id),
   close: id => ipcRenderer.send('session:close', id),
   pickDir: () => ipcRenderer.invoke('dir:pick'),
