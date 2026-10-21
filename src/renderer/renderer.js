@@ -264,20 +264,23 @@ function watchTrustPrompt(id, term) {
 }
 
 // restore: a saved tab ({ cwd, convId, titles }) to reopen instead of a fresh session.
-async function launch(kind, restore) {
+// background: open without switching to it (a session an AI opened).
+async function launch(kind, restore, { background = false } = {}) {
   if (state.updates?.[kind]?.state === 'updating') toast(`${KIND[kind].name} 正在更新，完成後會自動開啟`, 'info')
   const holder = document.createElement('div')
-  holder.className = 'term active'
+  holder.className = background ? 'term' : 'term active'
   $('terms').appendChild(holder)
-  for (const t of state.terms.values()) t.el.classList.remove('active')
-  $('empty').hidden = true
+  if (!background) {
+    for (const t of state.terms.values()) t.el.classList.remove('active')
+    $('empty').hidden = true
+  }
   const t = makeTerm(holder)
   const r = await api.createSession(kind, restore?.cwd || state.config.cwd, t.term.cols, t.term.rows, restore)
   if (r.error) {
     t.term.dispose()
     holder.remove()
     toast(r.error)
-    select(state.active)
+    if (!background) select(state.active)
     return
   }
   const s = r.session
@@ -285,7 +288,8 @@ async function launch(kind, restore) {
   // An update may have arrived before the reply; keep the newer copy.
   if (!state.sessions.has(s.id)) state.sessions.set(s.id, s)
   bindTerm(s.id, t)
-  select(s.id)
+  if (background) render()
+  else select(s.id)
   return s.id
 }
 
@@ -341,6 +345,7 @@ function renderTabs() {
       return `<div class="tab ${s.kind} ${s.id === state.active ? 'active' : ''} ${state.attention.has(s.id) ? 'attention' : ''}" data-id="${s.id}" title="${esc(s.cwd)}">
         <span class="dot ${s.status}"></span>
         <span class="kind ${s.kind}">${KIND[s.kind].icon}</span>
+        ${s.aiOpened ? '<span class="ai-tag" title="由 AI 開啟">[AI]</span>' : ''}
         <span class="title" data-rename="${s.id}" title="${esc(s.title)}（雙擊重新命名）">${esc(s.title)}</span>
         <button class="close ${armed ? 'confirm' : ''}" data-close="${s.id}" title="關閉">${armed ? '確定關閉？' : '×'}</button>
       </div>`
@@ -402,6 +407,7 @@ function card(s) {
   return `<div class="card ${s.status} ${s.kind} ${s.id === state.active ? 'selected' : ''}" data-id="${s.id}" role="button" tabindex="0">
     <div class="card-head">
       <span class="kind ${s.kind}">${KIND[s.kind].icon}</span>
+      ${s.aiOpened ? '<span class="ai-tag" title="由 AI 開啟">[AI]</span>' : ''}
       <span class="card-title" data-rename="${s.id}" title="${esc(s.title)}">${esc(s.title)}</span>
       <button class="card-edit" data-edit="${s.id}" title="重新命名">✎</button>
       <span class="badge ${s.status}"><span class="dot ${s.status}"></span>${STATUS[s.status]?.label ?? ''}</span>
@@ -502,6 +508,8 @@ function fillCollabMenu() {
   $('collab-asks').value = c.maxAsksPerTurn
   $('collab-depth').value = c.maxDepth
   $('collab-timeout').value = c.timeoutMin
+  $('collab-open').checked = c.allowOpen
+  $('collab-max-open').value = c.maxOpened
 }
 
 $('collab-btn').addEventListener('click', e => {
@@ -519,11 +527,13 @@ async function saveCollab() {
     maxAsksPerTurn: $('collab-asks').value,
     maxDepth: $('collab-depth').value,
     timeoutMin: $('collab-timeout').value,
+    allowOpen: $('collab-open').checked,
+    maxOpened: $('collab-max-open').value,
   })
   fillCollabMenu()
   renderCollabButton()
 }
-for (const id of ['collab-enabled', 'collab-asks', 'collab-depth', 'collab-timeout']) $(id).addEventListener('change', saveCollab)
+for (const id of ['collab-enabled', 'collab-asks', 'collab-depth', 'collab-timeout', 'collab-open', 'collab-max-open']) $(id).addEventListener('change', saveCollab)
 $('collab-stop').addEventListener('click', () => api.stopCollab())
 
 // ---------- git panel ----------
@@ -1055,13 +1065,18 @@ api.onSessionUpdate(s => {
     state.sessions.set(s.id, s)
     return
   }
-  if (prev && prev.status !== s.status && s.id !== state.active && s.status !== 'working') state.attention.add(s.id)
+  // A turn that answered another session reports back there, not here.
+  if (prev && prev.status !== s.status && s.id !== state.active && s.status !== 'working' && !s.collab?.serving) state.attention.add(s.id)
   state.sessions.set(s.id, s)
   render()
 })
 api.onSessionRemoved(removeSession)
 api.onSessionSelect(select)
-api.onCollabEvent(e => toast(`⇄ 已阻擋「${e.title}」的協作請求：${e.text}`, 'info'))
+api.onSessionSpawn(async (req, kind, restore) => {
+  const id = await launch(kind, restore, { background: true })
+  api.spawned(req, id ? { id } : { error: '開啟失敗' })
+})
+api.onCollabEvent(e =>toast(`⇄ 已阻擋「${e.title}」的協作請求：${e.text}`, 'info'))
 api.onUsage(u => {
   state.usage = u
   renderUsage()

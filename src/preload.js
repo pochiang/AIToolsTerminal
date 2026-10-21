@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld('aitt', {
   setCollab: next => ipcRenderer.invoke('collab:set', next),
   stopCollab: () => ipcRenderer.send('collab:stop'),
   onCollabEvent: on('collab:event'),
+  onSessionSpawn: on('session:spawn'),
+  spawned: (req, result) => ipcRenderer.send('session:spawned', req, result),
   readClipboard: () => ipcRenderer.invoke('clipboard:read'),
   terminalMenu: hasSelection => ipcRenderer.invoke('menu:terminal', hasSelection),
   writeClipboard: text => ipcRenderer.send('clipboard:write', text),

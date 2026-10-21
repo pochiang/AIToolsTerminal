@@ -51,7 +51,7 @@ function saveConfig() {
 function saveTabs() {
   if (restoring) return
   const list = [...sessions.values()]
-  config.tabs = list.map(s => ({ kind: s.kind, cwd: s.cwd, customTitle: s.customTitle, autoTitle: s.autoTitle, convId: s.convId }))
+  config.tabs = list.map(s => ({ kind: s.kind, cwd: s.cwd, customTitle: s.customTitle, autoTitle: s.autoTitle, convId: s.convId, aiOpened: s.aiOpened }))
   config.activeTab = list.findIndex(s => s.id === activeId)
   saveConfig()
 }
@@ -73,7 +73,32 @@ const collab = createCollab({
   send,
   update: s => send('session:update', publicSession(s)),
   titleOf,
+  spawn: spawnSession,
+  cancelSpawns,
 })
+
+// The renderer owns terminal creation, so ask it to open a background tab.
+// A request settles as soon as the session exists (see session:create); once
+// settled (timed out, cancelled), a late create for it is refused.
+const spawns = new Map()
+let spawnSeq = 0
+function spawnSession(kind, cwd, signal) {
+  return new Promise(resolve => {
+    if (!win || win.isDestroyed()) return resolve({ error: '視窗未開啟' })
+    const req = `p${++spawnSeq}`
+    const timer = setTimeout(() => spawns.get(req)?.({ error: '開啟逾時' }), 60000)
+    spawns.set(req, r => {
+      clearTimeout(timer)
+      spawns.delete(req)
+      resolve(r)
+    })
+    signal.abort = () => spawns.get(req)?.({ error: '已取消' })
+    send('session:spawn', req, kind, { cwd, aiOpened: true, spawnReq: req })
+  })
+}
+function cancelSpawns() {
+  for (const settle of [...spawns.values()]) settle({ error: '使用者已停止協作' })
+}
 
 function resolveExe(name) {
   try {
@@ -141,7 +166,14 @@ function setStatus(s, status, detail) {
   if (changed) s.since = Date.now()
   if (changed && status === 'done') {
     s.doneSeq++
-    collab.onDone(s, detail === '已中斷')
+    // A turn that answered another session reports back there; don't flag it
+    // as finished here, just go quietly back to waiting.
+    if (collab.onDone(s, detail === '已中斷')) {
+      s.status = 'waiting'
+      s.detail = ''
+      send('session:update', publicSession(s))
+      return
+    }
   }
   send('session:update', publicSession(s))
   if (changed && (status === 'done' || (status === 'waiting' && s.everWorked))) notify(s)
@@ -179,7 +211,7 @@ function claudeHookSettings(id) {
   const settings = {
     // The tool's top bar already shows quotas; drop the in-terminal usage band.
     enabledPlugins: { 'usage-bars@gkkc6-mods': false },
-    permissions: { allow: ['mcp__aitt__list_sessions', 'mcp__aitt__ask_session'] },
+    permissions: { allow: ['mcp__aitt__list_sessions', 'mcp__aitt__ask_session', 'mcp__aitt__open_session'] },
     hooks: {
       UserPromptSubmit: [{ hooks: cmd('UserPromptSubmit') }],
       PostToolUse: [{ matcher: '*', hooks: cmd('PostToolUse') }],
@@ -276,6 +308,7 @@ function createSession(kind, cwd, cols, rows, restore = {}) {
     autoTitle: restore.autoTitle || null,
     customTitle: restore.customTitle || null,
     convId: restore.convId || null,
+    aiOpened: !!restore.aiOpened,
     cwd,
     status: 'waiting',
     detail: '',
@@ -306,6 +339,7 @@ function createSession(kind, cwd, cols, rows, restore = {}) {
   }
 
   p.onData(data => {
+    s.lastOutputAt = Date.now()
     // Keep the mouse for selecting text: drop requests to capture it.
     data = data.replace(MOUSE_MODE_RE, '')
     send('pty:data', id, data)
@@ -562,9 +596,14 @@ ipcMain.on('tabs:restored', () => {
 ipcMain.handle('session:create', async (_e, kind, cwd, cols, rows, restore) => {
   // Don't start a CLI while its update may be replacing the executable.
   await updating[kind]
+  const spawnReq = restore?.spawnReq
+  if (spawnReq && !spawns.has(spawnReq)) return { error: 'AI 開啟對話的請求已取消或逾時' }
   try {
-    return { session: createSession(kind, cwd || config.cwd, cols, rows, restore || {}) }
+    const session = createSession(kind, cwd || config.cwd, cols, rows, restore || {})
+    if (spawnReq) spawns.get(spawnReq)({ id: session.id })
+    return { session }
   } catch (e) {
+    if (spawnReq) spawns.get(spawnReq)({ error: e.message })
     return { error: e.message }
   }
 })
@@ -639,6 +678,7 @@ ipcMain.handle('git:show', (_e, cwd, hash) => showCommit(cwd, hash))
 ipcMain.handle('git:commit', (_e, cwd, message, paths) => gitOps.commit(cwd, String(message || ''), Array.isArray(paths) ? paths : []))
 ipcMain.handle('git:pull', (_e, cwd) => gitOps.pull(cwd))
 ipcMain.handle('git:push', (_e, cwd) => gitOps.push(cwd))
+ipcMain.on('session:spawned', (_e, req, result) => spawns.get(req)?.(result || { error: '開啟失敗' }))
 ipcMain.handle('collab:set', (_e, next) => collab.setLimits(next || {}))
 ipcMain.on('collab:stop', () => collab.stopAll())
 ipcMain.handle('clipboard:read', () => clipboard.readText())

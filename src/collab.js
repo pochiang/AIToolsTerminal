@@ -8,18 +8,22 @@
 //   when a human presses Enter in it or it receives a new request;
 // - timeout: a request gives up after `timeoutMin` minutes;
 // - the global switch and "stop all" in the UI.
+//
+// `open_session` lets a session start a new one to ask (off by default); at
+// most `maxOpened` AI-opened sessions run at once, in the opener's folder.
 
-const DEFAULTS = { enabled: true, maxAsksPerTurn: 3, maxDepth: 2, timeoutMin: 10 }
+const DEFAULTS = { enabled: true, maxAsksPerTurn: 3, maxDepth: 2, timeoutMin: 10, allowOpen: false, maxOpened: 2 }
 const KIND_NAME = { claude: 'Claude Code', codex: 'Codex' }
 const STATUS_NAME = { working: '工作中', waiting: '等待中', done: '完成' }
 
 const ok = text => ({ text })
 const fail = text => ({ text, isError: true })
 
-function createCollab({ sessions, config, saveConfig, send, update, titleOf }) {
+function createCollab({ sessions, config, saveConfig, send, update, titleOf, spawn, cancelSpawns }) {
   config.collab = { ...DEFAULTS, ...(config.collab || {}) }
   const requests = new Map()
   let seq = 0
+  let opening = 0
 
   const limits = () => config.collab
 
@@ -44,7 +48,7 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf }) {
     const L = limits()
     const others = [...sessions.values()].filter(o => o.id !== s.id && !o.exited)
     const lines = others.map(
-      o => `- ${o.id}｜${KIND_NAME[o.kind]}｜「${titleOf(o)}」｜資料夾 ${o.folder}｜${STATUS_NAME[o.status] || o.status}` +
+      o => `- ${o.id}｜${KIND_NAME[o.kind]}${o.aiOpened ? '（AI 開啟）' : ''}｜「${titleOf(o)}」｜資料夾 ${o.folder}｜${STATUS_NAME[o.status] || o.status}` +
         (upstream(s).includes(o.id) ? '｜正在等你回覆（不可詢問）' : ''),
     )
     return ok(
@@ -57,6 +61,7 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf }) {
     const s = sessions.get(fromId)
     if (!s) return fail('找不到呼叫端對話。')
     if (tool === 'list_sessions') return listSessions(s)
+    if (tool === 'open_session') return open(s, args, signal)
     if (tool !== 'ask_session') return fail(`未知的工具：${tool}`)
 
     const L = limits()
@@ -93,6 +98,29 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf }) {
     }
   }
 
+  async function open(s, args, signal) {
+    const L = limits()
+    if (!L.enabled) return blocked(s, '使用者已關閉 AI 協作功能，請自行完成工作。')
+    if (!L.allowOpen) return blocked(s, '使用者沒有允許 AI 開新對話。請用 list_sessions 找現有對話，或自行完成工作。')
+    const live = [...sessions.values()].filter(o => o.aiOpened && !o.exited).length + opening
+    if (live >= L.maxOpened)
+      return blocked(s, `AI 開啟的對話已達上限 ${L.maxOpened} 個。請用 list_sessions 找現有對話詢問，或自行完成工作。`)
+    // Default to the other model: a second opinion is worth more from a different one.
+    const kind = args.kind === 'claude' || args.kind === 'codex' ? args.kind : s.kind === 'claude' ? 'codex' : 'claude'
+    opening++
+    let r
+    try { r = await spawn(kind, s.cwd, signal) } finally { opening-- }
+    if (r.error) return fail(`無法開啟對話：${r.error}`)
+    return ok(
+      `已在背景開啟 ${KIND_NAME[kind]} 對話 ${r.id}（資料夾 ${s.folder}）。` +
+        '請用 ask_session 詢問它；它看不到你的對話，訊息需自帶完整背景。',
+    )
+  }
+
+  // A CLI that just started is still drawing its UI and would drop typed text;
+  // wait for its output to settle first.
+  const ready = t => Date.now() - t.startedAt > 60000 || (t.lastOutputAt && Date.now() - t.lastOutputAt > 2000)
+
   function run(r, signal) {
     return new Promise(resolve => {
       const L = limits()
@@ -110,7 +138,7 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf }) {
         if (Date.now() > deadline)
           return r.finish(fail(`等待超過 ${L.timeoutMin} 分鐘仍未完成，已放棄；對方可能仍在分頁中繼續執行。`))
         // Deliver once the target is idle and not already answering someone.
-        if (r.state === 'queued' && t.status !== 'working' && !t.serving && !t.awaitingApproval) deliver(r, t)
+        if (r.state === 'queued' && t.status !== 'working' && !t.serving && !t.awaitingApproval && ready(t)) deliver(r, t)
       }
       r.timer = setInterval(tick, 500)
       tick()
@@ -134,16 +162,20 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf }) {
     update(from)
   }
 
-  /** Called when `t` finishes a turn. */
+  /** Called when `t` finishes a turn. Returns whether that turn answered a request. */
   function onDone(t, aborted) {
+    let answered = false
     for (const r of requests.values()) {
       if (r.to !== t.id || r.state !== 'sent' || t.doneSeq <= r.seqAtSend) continue
+      answered = true
       if (aborted) r.finish(fail('對方的回合被中斷，沒有回覆。'))
       else r.finish(ok(`${KIND_NAME[t.kind]}「${titleOf(t)}」回覆：\n\n${t.lastReply || '（沒有文字回覆）'}`))
     }
+    return answered
   }
 
   function stopAll() {
+    cancelSpawns()
     for (const r of requests.values())
       r.finish?.(fail('使用者已停止所有協作請求。請自行完成工作，不要再呼叫 ask_session。'))
   }
@@ -167,9 +199,12 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf }) {
       maxAsksPerTurn: n(next.maxAsksPerTurn ?? c.maxAsksPerTurn, 1, 20, c.maxAsksPerTurn),
       maxDepth: n(next.maxDepth ?? c.maxDepth, 1, 5, c.maxDepth),
       timeoutMin: n(next.timeoutMin ?? c.timeoutMin, 1, 60, c.timeoutMin),
+      allowOpen: next.allowOpen === undefined ? c.allowOpen : !!next.allowOpen,
+      maxOpened: n(next.maxOpened ?? c.maxOpened, 1, 5, c.maxOpened),
     }
     saveConfig()
     if (!config.collab.enabled) stopAll()
+    else if (!config.collab.allowOpen) cancelSpawns()
     return config.collab
   }
 

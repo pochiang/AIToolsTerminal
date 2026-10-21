@@ -93,6 +93,12 @@
           <label class="num-row">最多轉介<input type="number" id="collab-depth" min="1" max="5" />層</label>
           <label class="num-row">等待逾時<input type="number" id="collab-timeout" min="1" max="60" />分鐘</label>
           <p class="hint">「回合」從你在該對話按下 Enter 起算；轉介層數 1 = 只能直接詢問，對方不能再轉問別人。</p>
+          <label class="switch-row">
+            <span>允許 AI 開新對話</span>
+            <input type="checkbox" role="switch" class="toggle" id="collab-open" />
+          </label>
+          <label class="num-row">AI 最多同時開<input type="number" id="collab-max-open" min="1" max="5" />個</label>
+          <p class="hint">沒有可詢問的對話時，AI 可用 <code>open_session</code> 在背景開一個新頁籤（標上 [AI]，與發起方同資料夾）。每個新對話都會消耗用量。</p>
           <button class="stop-btn" id="collab-stop">停止所有進行中的協作</button>
         </div>
       </div>

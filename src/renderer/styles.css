@@ -162,6 +162,7 @@ code { font-family: var(--mono); color: var(--text); }
 .tab.active { border-color: var(--line); color: var(--text); }
 .tab.active.claude { background: var(--claude-tint-strong); border-top-color: var(--claude); }
 .tab.active.codex { background: var(--codex-tint-strong); border-top-color: var(--codex); }
+.ai-tag { flex: none; font-family: var(--mono); font-size: 10.5px; font-weight: 600; color: var(--muted); }
 .tab .kind { font-size: 12px; }
 .tab .kind.claude { color: var(--claude); }
 .tab .kind.codex { color: var(--codex); }

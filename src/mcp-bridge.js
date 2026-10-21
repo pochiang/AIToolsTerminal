@@ -28,6 +28,19 @@ const TOOLS = [
       additionalProperties: false,
     },
   },
+  {
+    name: 'open_session',
+    description:
+      '沒有合適的對話可詢問時，在背景開一個新的 AI 對話（與你同資料夾），之後用 ask_session 詢問它。' +
+      '需使用者在設定中允許，且同時開啟的數量有上限；每個新對話都會消耗使用者的用量，先用 list_sessions 確認沒有現成對話再開。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        kind: { type: 'string', enum: ['claude', 'codex'], description: '要開的 AI；省略時開與你不同的那一種，以取得不同模型的意見' },
+      },
+      additionalProperties: false,
+    },
+  },
 ]
 
 const inflight = new Map() // JSON-RPC id -> http request
