@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, clipboard, Notification, Menu } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, clipboard, Notification, Menu, shell } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
@@ -615,6 +615,10 @@ ipcMain.on('session:close', (_e, id) => {
   send('session:removed', id)
   saveTabs()
 })
+function openExternal(url) {
+  if (/^(https?|mailto):/i.test(url)) shell.openExternal(url)
+}
+ipcMain.on('link:open', (_e, url) => openExternal(String(url)))
 ipcMain.handle('dir:pick', async () => {
   const r = await dialog.showOpenDialog(win, { defaultPath: config.cwd, properties: ['openDirectory'] })
   if (r.canceled || !r.filePaths[0]) return null
@@ -664,6 +668,16 @@ function createWindow() {
     icon: path.join(__dirname, '..', 'assets', 'icon.ico'),
     autoHideMenuBar: true,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+  })
+  // Web links open in the default browser, never inside the app.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    openExternal(url)
+    return { action: 'deny' }
+  })
+  win.webContents.on('will-navigate', (e, url) => {
+    if (url.startsWith('file:')) return
+    e.preventDefault()
+    openExternal(url)
   })
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'))
   win.on('focus', () => win.flashFrame(false))

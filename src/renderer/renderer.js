@@ -152,9 +152,13 @@ function makeTerm(holder) {
     scrollback: 10000,
     allowProposedApi: true,
     theme: THEME,
+    // OSC 8 hyperlinks: open directly instead of xterm's confirm() prompt.
+    linkHandler: { activate: (_e, uri) => api.openLink(uri) },
   })
   const fit = new FitAddon.FitAddon()
   term.loadAddon(fit)
+  // Plain URLs in the output.
+  term.loadAddon(new WebLinksAddon.WebLinksAddon((_e, uri) => api.openLink(uri)))
   term.open(holder)
   try { fit.fit() } catch {}
   return { term, fit }

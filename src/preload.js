@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('aitt', {
   tabsRestored: () => ipcRenderer.send('tabs:restored'),
   setActive: id => ipcRenderer.send('session:active', id),
   close: id => ipcRenderer.send('session:close', id),
+  openLink: url => ipcRenderer.send('link:open', url),
   pickDir: () => ipcRenderer.invoke('dir:pick'),
   setDir: dir => ipcRenderer.invoke('dir:set', dir),
   refreshUsage: () => ipcRenderer.send('usage:refresh'),
