@@ -254,6 +254,9 @@ function createSession(kind, cwd, cols, rows, restore = {}) {
       '-c', `mcp_servers.aitt.tool_timeout_sec=${toolTimeoutSec}`,
       // The relay enforces its own limits; don't stop for approval on every call.
       '-c', 'mcp_servers.aitt.default_tools_approval_mode="approve"',
+      // Stay in the normal buffer so the wheel scrolls history instead of
+      // being turned into arrow keys that page through Codex's input history.
+      '--no-alt-screen',
     ]
     if (restore.convId) args.unshift('resume', restore.convId)
   }
