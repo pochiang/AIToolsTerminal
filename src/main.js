@@ -107,7 +107,7 @@ function watchTitle(s, data) {
     }
     if (s.awaitingApproval && s.status === 'waiting') {
       s.awaitingApproval = false
-      setStatus(s, 'working', 'Codex 正在處理')
+      setStatus(s, 'working', '')
     }
     const topic = topicFromTitle(m[1], s)
     if (topic && topic !== s.autoTitle) {
@@ -322,10 +322,10 @@ function handleHook({ session, event, payload }) {
     case 'UserPromptSubmit':
       s.everWorked = true
       if (payload.prompt) s.lastPrompt = String(payload.prompt).slice(0, 500)
-      setStatus(s, 'working', 'Claude 正在處理')
+      setStatus(s, 'working', '')
       break
     case 'PostToolUse':
-      if (s.status === 'waiting') setStatus(s, 'working', 'Claude 正在處理')
+      if (s.status === 'waiting') setStatus(s, 'working', '')
       break
     case 'Notification': {
       const type = payload.notification_type || ''
@@ -431,7 +431,7 @@ function handleCodexLine(s, obj) {
     if (p.type === 'task_started') {
       s.everWorked = true
       s.awaitingApproval = false
-      setStatus(s, 'working', 'Codex 正在處理')
+      setStatus(s, 'working', '')
     } else if (p.type === 'task_complete') {
       if (p.last_agent_message) s.lastReply = String(p.last_agent_message)
       setStatus(s, 'done', '')
@@ -526,7 +526,7 @@ ipcMain.on('session:input', (_e, id, data) => {
   if (s.kind === 'codex' && s.awaitingApproval && s.status === 'waiting') {
     s.awaitingApproval = false
     s.outBuf = ''
-    setStatus(s, 'working', 'Codex 正在處理')
+    setStatus(s, 'working', '')
   }
 })
 ipcMain.on('session:resize', (_e, id, cols, rows) => {
