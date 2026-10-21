@@ -389,7 +389,7 @@ function card(s) {
       <button class="card-edit" data-edit="${s.id}" title="重新命名">✎</button>
       <span class="badge ${s.status}"><span class="dot ${s.status}"></span>${STATUS[s.status]?.label ?? ''}</span>
     </div>
-    <div class="card-detail">${esc(s.detail)}</div>
+    ${s.detail ? `<div class="card-detail">${esc(s.detail)}</div>` : ''}
     ${collabLine}${meta}
     <div class="card-dir" title="${esc(s.cwd)}"><bdi dir="ltr">${esc(s.cwd)}</bdi></div>
   </div>`

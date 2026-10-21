@@ -261,7 +261,7 @@ function createSession(kind, cwd, cols, rows) {
     customTitle: null,
     cwd,
     status: 'waiting',
-    detail: '等待輸入第一個指令',
+    detail: '',
     since: Date.now(),
     startedAt: Date.now(),
     everWorked: false,
@@ -331,7 +331,7 @@ function handleHook({ session, event, payload }) {
       const type = payload.notification_type || ''
       const msg = payload.message || ''
       if (type === 'idle_prompt' || /waiting for your input/i.test(msg)) {
-        if (s.status === 'working') setStatus(s, 'waiting', '等待你的輸入')
+        if (s.status === 'working') setStatus(s, 'waiting', '')
       } else if (type === 'permission_prompt' || /permission|approv/i.test(msg)) {
         setStatus(s, 'waiting', '需要權限確認')
       } else if (s.status === 'working') {
@@ -341,7 +341,7 @@ function handleHook({ session, event, payload }) {
     }
     case 'Stop':
       s.lastReply = payload.last_assistant_message || (payload.transcript_path && lastClaudeReply(payload.transcript_path)) || s.lastReply
-      setStatus(s, 'done', '回合完成')
+      setStatus(s, 'done', '')
       break
     case 'SessionEnd':
       setStatus(s, 'done', '對話已結束')
@@ -434,7 +434,7 @@ function handleCodexLine(s, obj) {
       setStatus(s, 'working', 'Codex 正在處理')
     } else if (p.type === 'task_complete') {
       if (p.last_agent_message) s.lastReply = String(p.last_agent_message)
-      setStatus(s, 'done', '回合完成')
+      setStatus(s, 'done', '')
     } else if (p.type === 'turn_aborted') {
       setStatus(s, 'done', '已中斷')
     } else if (p.type === 'token_count') {
