@@ -45,6 +45,13 @@ function saveConfig() {
   fs.mkdirSync(path.dirname(CONFIG_FILE), { recursive: true })
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2))
 }
+// Open tabs, so the next launch can reopen them and resume their conversations.
+function saveTabs() {
+  const list = [...sessions.values()]
+  config.tabs = list.map(s => ({ kind: s.kind, cwd: s.cwd, customTitle: s.customTitle, autoTitle: s.autoTitle, convId: s.convId }))
+  config.activeTab = list.findIndex(s => s.id === activeId)
+  saveConfig()
+}
 function rememberDir(dir) {
   config.cwd = dir
   config.recentDirs = [dir, ...config.recentDirs.filter(d => d.toLowerCase() !== dir.toLowerCase())].slice(0, 8)
@@ -113,6 +120,7 @@ function watchTitle(s, data) {
     if (topic && topic !== s.autoTitle) {
       s.autoTitle = topic
       send('session:update', publicSession(s))
+      saveTabs()
     }
   }
   // Keep an OSC sequence split across chunks for the next one.
@@ -216,7 +224,7 @@ function startUpdates() {
 
 // ---------- sessions ----------
 
-function createSession(kind, cwd, cols, rows) {
+function createSession(kind, cwd, cols, rows, restore = {}) {
   const exeName = kind === 'claude' ? 'claude' : 'codex'
   const exe = resolveExe(exeName)
   if (!exe) throw new Error(`找不到 ${exeName} 指令，請確認已安裝並在 PATH 中`)
@@ -233,6 +241,7 @@ function createSession(kind, cwd, cols, rows) {
     fs.mkdirSync(path.dirname(mcpFile), { recursive: true })
     fs.writeFileSync(mcpFile, JSON.stringify({ mcpServers: { aitt: { type: 'stdio', command: NODE_RUNTIME, args: [MCP_BRIDGE], env: bridgeEnv } } }, null, 2))
     args = ['--settings', claudeHookSettings(id), '--mcp-config', mcpFile]
+    if (restore.convId) args.push('--resume', restore.convId)
   } else {
     const env = Object.entries(bridgeEnv).map(([k, v]) => `${k}="${v}"`).join(',')
     args = [
@@ -243,6 +252,7 @@ function createSession(kind, cwd, cols, rows) {
       // The relay enforces its own limits; don't stop for approval on every call.
       '-c', 'mcp_servers.aitt.default_tools_approval_mode="approve"',
     ]
+    if (restore.convId) args.unshift('resume', restore.convId)
   }
   let file = exe
   if (/\.(cmd|bat)$/i.test(exe)) {
@@ -257,8 +267,9 @@ function createSession(kind, cwd, cols, rows) {
     id,
     kind,
     folder: path.basename(cwd) || cwd,
-    autoTitle: null,
-    customTitle: null,
+    autoTitle: restore.autoTitle || null,
+    customTitle: restore.customTitle || null,
+    convId: restore.convId || null,
     cwd,
     status: 'waiting',
     detail: '',
@@ -280,6 +291,13 @@ function createSession(kind, cwd, cols, rows) {
     codex: kind === 'codex' ? { file: null, offset: 0, partial: '' } : null,
   }
   sessions.set(id, s)
+  // A resumed Codex conversation keeps writing to its old log; skip what's already there.
+  const oldLog = kind === 'codex' && restore.convId && findRolloutById(restore.convId)
+  if (oldLog) {
+    claimed.add(oldLog)
+    s.codex.file = oldLog
+    try { s.codex.offset = fs.statSync(oldLog).size } catch {}
+  }
 
   p.onData(data => {
     // Keep the mouse for selecting text: drop requests to capture it.
@@ -294,6 +312,7 @@ function createSession(kind, cwd, cols, rows) {
     setStatus(s, 'done', `程序已結束（代碼 ${exitCode}）`)
   })
   rememberDir(cwd)
+  saveTabs()
   return publicSession(s)
 }
 
@@ -318,6 +337,10 @@ function watchCodexApproval(s, data) {
 function handleHook({ session, event, payload }) {
   const s = sessions.get(session)
   if (!s) return
+  if (payload.session_id && payload.session_id !== s.convId) {
+    s.convId = payload.session_id
+    saveTabs()
+  }
   switch (event) {
     case 'UserPromptSubmit':
       s.everWorked = true
@@ -425,6 +448,17 @@ function findRollout(s) {
   return null
 }
 
+function findRolloutById(convId) {
+  const sub = dir => { try { return fs.readdirSync(dir).sort().reverse() } catch { return [] } }
+  for (const y of sub(CODEX_SESSIONS))
+    for (const m of sub(path.join(CODEX_SESSIONS, y)))
+      for (const d of sub(path.join(CODEX_SESSIONS, y, m))) {
+        const name = sub(path.join(CODEX_SESSIONS, y, m, d)).find(n => n.endsWith(`${convId}.jsonl`))
+        if (name) return path.join(CODEX_SESSIONS, y, m, d, name)
+      }
+  return null
+}
+
 function handleCodexLine(s, obj) {
   const p = obj.payload || {}
   if (obj.type === 'event_msg') {
@@ -461,6 +495,11 @@ function pollCodex() {
       c.file = findRollout(s)
       if (!c.file) continue
       claimed.add(c.file)
+      const convId = c.file.match(/([0-9a-f]{8}-[0-9a-f-]{27})\.jsonl$/i)?.[1]
+      if (convId && convId !== s.convId) {
+        s.convId = convId
+        saveTabs()
+      }
     }
     let size
     try { size = fs.statSync(c.file).size } catch { continue }
@@ -507,11 +546,11 @@ ipcMain.handle('app:init', () => ({
   updates: updateState,
   sessions: [...sessions.values()].map(publicSession),
 }))
-ipcMain.handle('session:create', async (_e, kind, cwd, cols, rows) => {
+ipcMain.handle('session:create', async (_e, kind, cwd, cols, rows, restore) => {
   // Don't start a CLI while its update may be replacing the executable.
   await updating[kind]
   try {
-    return { session: createSession(kind, cwd || config.cwd, cols, rows) }
+    return { session: createSession(kind, cwd || config.cwd, cols, rows, restore || {}) }
   } catch (e) {
     return { error: e.message }
   }
@@ -538,6 +577,7 @@ ipcMain.on('session:rename', (_e, id, name) => {
   if (!s) return
   s.customTitle = String(name || '').trim().slice(0, 80) || null
   send('session:update', publicSession(s))
+  saveTabs()
 })
 // Clicking a finished card marks it seen: back to waiting, with no notification.
 ipcMain.on('session:ack', (_e, id) => {
@@ -550,6 +590,7 @@ ipcMain.on('session:ack', (_e, id) => {
 })
 ipcMain.on('session:active', (_e, id) => {
   activeId = id
+  saveTabs()
 })
 ipcMain.on('session:close', (_e, id) => {
   const s = sessions.get(id)
@@ -559,6 +600,7 @@ ipcMain.on('session:close', (_e, id) => {
   for (const f of [`${id}.json`, `${id}-settings.json`])
     try { fs.rmSync(path.join(app.getPath('userData'), 'mcp', f), { force: true }) } catch {}
   send('session:removed', id)
+  saveTabs()
 })
 ipcMain.handle('dir:pick', async () => {
   const r = await dialog.showOpenDialog(win, { defaultPath: config.cwd, properties: ['openDirectory'] })

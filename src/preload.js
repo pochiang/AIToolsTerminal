@@ -4,7 +4,7 @@ const on = channel => cb => ipcRenderer.on(channel, (_e, ...args) => cb(...args)
 
 contextBridge.exposeInMainWorld('aitt', {
   init: () => ipcRenderer.invoke('app:init'),
-  createSession: (kind, cwd, cols, rows) => ipcRenderer.invoke('session:create', kind, cwd, cols, rows),
+  createSession: (kind, cwd, cols, rows, restore) => ipcRenderer.invoke('session:create', kind, cwd, cols, rows, restore),
   input: (id, data) => ipcRenderer.send('session:input', id, data),
   resize: (id, cols, rows) => ipcRenderer.send('session:resize', id, cols, rows),
   rename: (id, name) => ipcRenderer.send('session:rename', id, name),

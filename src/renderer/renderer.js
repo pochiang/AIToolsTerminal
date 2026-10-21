@@ -160,9 +160,18 @@ function makeTerm(holder) {
   return { term, fit }
 }
 
+// Clicking or typing in a finished session counts as having seen it.
+function ack(id) {
+  if (state.sessions.get(id)?.status === 'done') api.ack(id)
+}
+
 function bindTerm(id, t) {
   const { term } = t
-  term.onData(d => api.input(id, d))
+  term.onData(d => {
+    ack(id)
+    api.input(id, d)
+  })
+  t.el.addEventListener('mousedown', () => ack(id))
   term.onResize(({ cols, rows }) => api.resize(id, cols, rows))
   const copy = () => {
     if (!term.hasSelection()) return false
@@ -250,7 +259,8 @@ function watchTrustPrompt(id, term) {
   })
 }
 
-async function launch(kind) {
+// restore: a saved tab ({ cwd, convId, titles }) to reopen instead of a fresh session.
+async function launch(kind, restore) {
   if (state.updates?.[kind]?.state === 'updating') toast(`${KIND[kind].name} 正在更新，完成後會自動開啟`, 'info')
   const holder = document.createElement('div')
   holder.className = 'term active'
@@ -258,7 +268,7 @@ async function launch(kind) {
   for (const t of state.terms.values()) t.el.classList.remove('active')
   $('empty').hidden = true
   const t = makeTerm(holder)
-  const r = await api.createSession(kind, state.config.cwd, t.term.cols, t.term.rows)
+  const r = await api.createSession(kind, restore?.cwd || state.config.cwd, t.term.cols, t.term.rows, restore)
   if (r.error) {
     t.term.dispose()
     holder.remove()
@@ -272,6 +282,7 @@ async function launch(kind) {
   if (!state.sessions.has(s.id)) state.sessions.set(s.id, s)
   bindTerm(s.id, t)
   select(s.id)
+  return s.id
 }
 
 function select(id) {
@@ -358,7 +369,9 @@ $('tabs').addEventListener('mousedown', e => {
 $('tabs').addEventListener('click', e => {
   if (e.target.closest('[data-close]')) return
   const tab = e.target.closest('.tab')
-  if (tab) select(tab.dataset.id)
+  if (!tab) return
+  ack(tab.dataset.id)
+  select(tab.dataset.id)
 })
 $('tabs').addEventListener('auxclick', e => {
   const tab = e.target.closest('.tab')
@@ -403,7 +416,7 @@ $('status-groups').addEventListener('click', e => {
   }
   const c = e.target.closest('.card')
   if (!c) return
-  if (state.sessions.get(c.dataset.id)?.status === 'done') api.ack(c.dataset.id)
+  ack(c.dataset.id)
   select(c.dataset.id)
 })
 
@@ -1068,7 +1081,7 @@ ro.observe($('terms'))
 
 setInterval(renderUsage, 30000)
 
-api.init().then(({ config, usage, updates }) => {
+api.init().then(async ({ config, usage, updates, sessions }) => {
   state.config = config
   state.usage = usage
   state.updates = updates
@@ -1076,4 +1089,9 @@ api.init().then(({ config, usage, updates }) => {
   renderUsage()
   render()
   refreshGit()
+  // Reopen last time's tabs (not on a window reload, where the sessions still live).
+  const tabs = sessions.length ? [] : config.tabs || []
+  const ids = []
+  for (const tab of tabs) ids.push(await launch(tab.kind, tab))
+  if (tabs.length) select(ids[config.activeTab] ?? state.active)
 })
