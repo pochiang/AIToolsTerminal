@@ -327,17 +327,22 @@ function renderTabs() {
         <span class="dot ${s.status}"></span>
         <span class="kind ${s.kind}">${KIND[s.kind].icon}</span>
         <span class="title" data-rename="${s.id}" title="${esc(s.title)}（雙擊重新命名）">${esc(s.title)}</span>
-        ${s.title !== s.folder ? `<span class="folder">${esc(s.folder)}</span>` : ''}
         <button class="close ${armed ? 'confirm' : ''}" data-close="${s.id}" title="關閉">${armed ? '確定關閉？' : '×'}</button>
       </div>`
     })
     .join('')
-  $('tabs').innerHTML = html
+  // Status updates arrive constantly while a session works; replacing identical
+  // markup would swap the element under the pointer mid-click.
+  if (html !== lastTabsHtml) $('tabs').innerHTML = lastTabsHtml = html
 }
+let lastTabsHtml = ''
 
-$('tabs').addEventListener('click', e => {
-  const close = e.target.closest('[data-close]')
+// Close on mousedown: a re-render between mousedown and mouseup (status changes)
+// would otherwise swallow the click.
+$('tabs').addEventListener('mousedown', e => {
+  const close = e.button === 0 && e.target.closest('[data-close]')
   if (close) {
+    e.preventDefault()
     const id = close.dataset.close
     const s = state.sessions.get(id)
     if (s.status === 'working' && !s.exited && !closeArmed.has(id)) {
@@ -348,8 +353,10 @@ $('tabs').addEventListener('click', e => {
     clearTimeout(closeArmed.get(id))
     closeArmed.delete(id)
     closeSession(id)
-    return
   }
+})
+$('tabs').addEventListener('click', e => {
+  if (e.target.closest('[data-close]')) return
   const tab = e.target.closest('.tab')
   if (tab) select(tab.dataset.id)
 })
@@ -368,7 +375,6 @@ function renderStatus() {
 }
 
 function card(s) {
-  const text = s.lastPrompt ? `<div class="card-text"><span class="lbl">指令：</span>${esc(s.lastPrompt)}</div>` : ''
   const meta = s.tokens ? `<div class="card-meta">${s.tokens.toLocaleString()} tokens</div>` : ''
   const c = s.collab || {}
   const collabLine = c.asking
@@ -384,7 +390,7 @@ function card(s) {
       <span class="badge ${s.status}"><span class="dot ${s.status}"></span>${STATUS[s.status]?.label ?? ''}</span>
     </div>
     <div class="card-detail">${esc(s.detail)}</div>
-    ${collabLine}${text}${meta}
+    ${collabLine}${meta}
     <div class="card-dir" title="${esc(s.cwd)}"><bdi dir="ltr">${esc(s.cwd)}</bdi></div>
   </div>`
 }
@@ -421,6 +427,7 @@ function startRename(id, el) {
   const s = state.sessions.get(id)
   if (!s || !el || state.editing) return
   state.editing = id
+  lastTabsHtml = ''
   const input = document.createElement('input')
   input.className = 'rename'
   input.value = s.title

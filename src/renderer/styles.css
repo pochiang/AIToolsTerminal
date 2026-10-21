@@ -170,10 +170,6 @@ code { font-family: var(--mono); color: var(--text); }
 .tab .close.confirm { color: var(--danger); font-size: 11px; }
 .tab.attention .title::after { content: ' •'; color: var(--waiting); }
 .tab .title { max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
-.tab .folder {
-  font-family: var(--mono); font-size: 11px; color: var(--dim);
-  max-width: 140px; overflow: hidden; text-overflow: ellipsis;
-}
 .rename {
   font: inherit; color: var(--text);
   background: var(--bg); border: 1px solid var(--working); border-radius: 4px;
@@ -352,12 +348,6 @@ code { font-family: var(--mono); color: var(--text); }
 .card.working .card-detail { color: #8fbfff; }
 .card.waiting .card-detail { color: #ffd27a; }
 .card.done .card-detail { color: #7fd88e; }
-.card-text {
-  margin-top: 4px; color: var(--muted); font-size: 12px;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-  white-space: pre-wrap; word-break: break-word;
-}
-.card-text .lbl { color: var(--dim); }
 .card-meta { margin-top: 4px; color: var(--dim); font-size: 11px; }
 
 /* ---------- git panel ---------- */
