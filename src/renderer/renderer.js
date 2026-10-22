@@ -21,6 +21,7 @@ const STATUS = {
 const KIND = {
   claude: { icon: '✻', name: 'Claude Code' },
   codex: { icon: '◎', name: 'Codex' },
+  shell: { icon: '❯', name: 'Terminal' },
 }
 
 const THEME = {
@@ -222,7 +223,7 @@ function bindTerm(id, t) {
     else if (action === 'clear') term.clear()
     term.focus()
   })
-  watchTrustPrompt(id, term)
+  if (state.sessions.get(id)?.kind !== 'shell') watchTrustPrompt(id, term)
   state.terms.set(id, t)
   const queued = state.pending.get(id)
   if (queued) {
@@ -343,7 +344,7 @@ function renderTabs() {
     .map(s => {
       const armed = closeArmed.has(s.id)
       return `<div class="tab ${s.kind} ${s.id === state.active ? 'active' : ''} ${state.attention.has(s.id) ? 'attention' : ''}" data-id="${s.id}" title="${esc(s.cwd)}">
-        <span class="dot ${s.status}"></span>
+        <span class="dot ${s.status} ${s.status === 'waiting' && s.detail ? 'ask' : ''}"></span>
         <span class="kind ${s.kind}">${KIND[s.kind].icon}</span>
         ${s.aiOpened ? '<span class="ai-tag" title="由 AI 開啟">[AI]</span>' : ''}
         <span class="title" data-rename="${s.id}" title="${esc(s.title)}（雙擊重新命名）">${esc(s.title)}</span>

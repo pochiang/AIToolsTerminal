@@ -48,7 +48,7 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf, spa
 
   function listSessions(s) {
     const L = limits()
-    const others = [...sessions.values()].filter(o => o.id !== s.id && !o.exited)
+    const others = [...sessions.values()].filter(o => o.id !== s.id && !o.exited && o.kind !== 'shell')
     const same = o => path.resolve(o.cwd).toLowerCase() === path.resolve(s.cwd).toLowerCase()
     const lines = others.map(
       o => `- ${o.id}｜${KIND_NAME[o.kind]}${o.aiOpened ? '（AI 開啟）' : ''}｜「${titleOf(o)}」｜${same(o) ? '與你同資料夾' : `不同資料夾（${o.folder}）`}｜${STATUS_NAME[o.status] || o.status}` +
@@ -75,7 +75,7 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf, spa
     const L = limits()
     if (!L.enabled) return blocked(s, '使用者已關閉 AI 協作功能，請自行完成工作。')
     const target = sessions.get(String(args.session_id || '').trim())
-    if (!target || target.exited) return fail('找不到該對話或它已結束，請先呼叫 list_sessions。')
+    if (!target || target.exited || target.kind === 'shell') return fail('找不到該對話或它已結束，請先呼叫 list_sessions。')
     if (target.id === s.id) return fail('不能詢問自己。')
     const message = String(args.message || '').trim()
     if (!message) return fail('訊息不可為空。')

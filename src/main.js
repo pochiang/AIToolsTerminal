@@ -112,7 +112,7 @@ function resolveExe(name) {
 }
 
 function publicSession(s) {
-  const { pty: _p, codex: _c, outBuf: _o, oscTail: _t, ...rest } = s
+  const { pty: _p, codex: _c, outBuf: _o, oscTail: _t, shellTail: _st, ...rest } = s
   return { ...rest, title: titleOf(s), collab: collab.describe(s) }
 }
 
@@ -261,8 +261,9 @@ function startUpdates() {
 // ---------- sessions ----------
 
 function createSession(kind, cwd, cols, rows, restore = {}) {
-  const exeName = kind === 'claude' ? 'claude' : 'codex'
-  const exe = resolveExe(exeName)
+  // A plain terminal: PowerShell 7 when installed, else Windows PowerShell.
+  const exeName = kind === 'shell' ? 'powershell' : kind
+  const exe = (kind === 'shell' && resolveExe('pwsh')) || resolveExe(exeName)
   if (!exe) throw new Error(`找不到 ${exeName} 指令，請確認已安裝並在 PATH 中`)
   if (!fs.existsSync(cwd)) throw new Error(`資料夾不存在：${cwd}`)
 
@@ -278,7 +279,7 @@ function createSession(kind, cwd, cols, rows, restore = {}) {
     fs.writeFileSync(mcpFile, JSON.stringify({ mcpServers: { aitt: { type: 'stdio', command: NODE_RUNTIME, args: [MCP_BRIDGE], env: bridgeEnv } } }, null, 2))
     args = ['--settings', claudeHookSettings(id), '--mcp-config', mcpFile]
     if (restore.convId) args.push('--resume', restore.convId)
-  } else {
+  } else if (kind === 'codex') {
     const env = Object.entries(bridgeEnv).map(([k, v]) => `${k}="${v}"`).join(',')
     args = [
       '-c', `mcp_servers.aitt.command="${NODE_RUNTIME}"`,
@@ -292,6 +293,8 @@ function createSession(kind, cwd, cols, rows, restore = {}) {
       '--no-alt-screen',
     ]
     if (restore.convId) args.unshift('resume', restore.convId)
+  } else {
+    args = ['-NoLogo', '-NoExit', '-EncodedCommand', SHELL_INTEGRATION]
   }
   let file = exe
   if (/\.(cmd|bat)$/i.test(exe)) {
@@ -344,8 +347,10 @@ function createSession(kind, cwd, cols, rows, restore = {}) {
     // Keep the mouse for selecting text: drop requests to capture it.
     data = data.replace(MOUSE_MODE_RE, '')
     send('pty:data', id, data)
-    watchTitle(s, data)
+    // A shell's title is just its path; keep the folder name.
+    if (kind !== 'shell') watchTitle(s, data)
     if (kind === 'codex') watchCodexApproval(s, data)
+    if (kind === 'shell') watchShell(s, data)
   })
   p.onExit(({ exitCode }) => {
     s.exited = true
@@ -355,6 +360,36 @@ function createSession(kind, cwd, cols, rows, restore = {}) {
   rememberDir(cwd)
   saveTabs()
   return publicSession(s)
+}
+
+// Terminal tabs run shell-integration.ps1 (as -EncodedCommand, which also works
+// from inside the asar and under any execution policy), so each command is
+// marked: OSC 133;C;<base64 command> when it starts, 133;D;<exit code> when done.
+const SHELL_INTEGRATION = Buffer.from(fs.readFileSync(path.join(__dirname, 'shell-integration.ps1'), 'utf8'), 'utf16le').toString('base64')
+const SHELL_MARK_START = '\x1b]133;'
+const SHELL_MARK_RE =/\x1b\]133;([CD]);?([^\x07\x1b]*)(?:\x07|\x1b\\)/g
+// Shorter commands (ls, cd) go straight back to waiting: no flash, no notification.
+const QUICK_COMMAND_MS = 10000
+function watchShell(s, data) {
+  const text = (s.shellTail || '') + data
+  s.shellTail = ''
+  for (const m of text.matchAll(SHELL_MARK_RE)) {
+    if (m[1] === 'C') {
+      const cmd = Buffer.from(m[2], 'base64').toString('utf8').trim()
+      s.commandAt = Date.now()
+      s.lastPrompt = cmd.slice(0, 500)
+      setStatus(s, 'working', cmd.slice(0, 120))
+    } else if (s.status === 'working') {
+      const code = Number(m[2]) || 0
+      const cmd = s.lastPrompt.slice(0, 120)
+      if (Date.now() - s.commandAt < QUICK_COMMAND_MS) setStatus(s, 'waiting', '')
+      else setStatus(s, 'done', code ? `失敗（代碼 ${code}）：${cmd}` : cmd)
+    }
+  }
+  // Keep a mark split across chunks for the next one.
+  const tail = text.slice(text.lastIndexOf('\x1b'))
+  if (tail.startsWith('\x1b') && tail.length < 4096 &&
+      (SHELL_MARK_START.startsWith(tail) || (tail.startsWith(SHELL_MARK_START) && !tail.includes('\x07')))) s.shellTail = tail
 }
 
 // DECSET/DECRST for mouse reporting (Codex turns on 1003 "any motion"), which

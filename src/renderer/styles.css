@@ -12,6 +12,9 @@
   --codex-tint: rgba(169, 155, 255, .09);
   --claude-tint-strong: rgba(224, 122, 95, .16);
   --codex-tint-strong: rgba(169, 155, 255, .16);
+  --shell: #a0a6b4;
+  --shell-tint: rgba(160, 166, 180, .09);
+  --shell-tint-strong: rgba(160, 166, 180, .16);
   --working: #4f9cff;
   --waiting: #f5b942;
   --done: #3fb950;
@@ -151,6 +154,7 @@ code { font-family: var(--mono); color: var(--text); }
 .launch .plus { font-weight: 400; }
 .launch.claude { background: rgba(224,122,95,.12); border-color: rgba(224,122,95,.5); color: #f4a48d; }
 .launch.codex { background: rgba(169,155,255,.12); border-color: rgba(169,155,255,.5); color: #c6bcff; }
+.launch.shell { background: rgba(160,166,180,.12); border-color: rgba(160,166,180,.5); color: #c4c8d2; }
 .launch:hover { filter: brightness(1.25); }
 
 /* ---------- tabs ---------- */
@@ -168,16 +172,20 @@ code { font-family: var(--mono); color: var(--text); }
 .tab { border-top: 2px solid transparent; }
 .tab.claude { background: var(--claude-tint); }
 .tab.codex { background: var(--codex-tint); }
+.tab.shell { background: var(--shell-tint); }
 .tab:hover { color: var(--text); }
 .tab.claude:hover { background: var(--claude-tint-strong); }
 .tab.codex:hover { background: var(--codex-tint-strong); }
+.tab.shell:hover { background: var(--shell-tint-strong); }
 .tab.active { border-color: var(--line); color: var(--text); }
 .tab.active.claude { background: var(--claude-tint-strong); border-top-color: var(--claude); }
 .tab.active.codex { background: var(--codex-tint-strong); border-top-color: var(--codex); }
+.tab.active.shell { background: var(--shell-tint-strong); border-top-color: var(--shell); }
 .ai-tag { flex: none; font-family: var(--mono); font-size: 10.5px; font-weight: 600; color: var(--muted); }
 .tab .kind { font-size: 12px; }
 .tab .kind.claude { color: var(--claude); }
 .tab .kind.codex { color: var(--codex); }
+.tab .kind.shell { color: var(--shell); }
 .tab .close { background: none; border: 0; color: var(--dim); border-radius: 4px; padding: 0 5px; font-size: 14px; }
 .tab .close:hover { background: #2d3345; color: var(--text); }
 .tab .close.confirm { color: var(--danger); font-size: 11px; }
@@ -195,12 +203,15 @@ code { font-family: var(--mono); color: var(--text); }
 .dot.working { background: var(--working); animation: pulse 1.2s ease-in-out infinite; }
 .dot.waiting { background: var(--waiting); }
 .dot.done { background: var(--done); }
+/* Tabs only light up when something is happening or needs you (approval). */
+.tab .dot.waiting:not(.ask) { display: none; }
 @keyframes pulse { 50% { opacity: .35; transform: scale(.8); } }
 
 /* ---------- terminals ---------- */
 .terms { flex: 1; position: relative; background: var(--bg-2); min-height: 0; border-top: 2px solid transparent; }
 .terms[data-kind="claude"] { border-top-color: var(--claude); }
 .terms[data-kind="codex"] { border-top-color: var(--codex); }
+.terms[data-kind="shell"] { border-top-color: var(--shell); }
 .term { position: absolute; inset: 0; padding: 8px 4px 4px 10px; visibility: hidden; }
 .term.active { visibility: visible; }
 .term .xterm { height: 100%; }
@@ -226,9 +237,11 @@ code { font-family: var(--mono); color: var(--text); }
 .big-launch:hover { transform: translateY(-2px); }
 .big-launch.claude:hover { border-color: var(--claude); }
 .big-launch.codex:hover { border-color: var(--codex); }
+.big-launch.shell:hover { border-color: var(--shell); }
 .big-icon { font-size: 30px; }
 .big-launch.claude .big-icon { color: var(--claude); }
 .big-launch.codex .big-icon { color: var(--codex); }
+.big-launch.shell .big-icon { color: var(--shell); }
 .big-launch strong { font-size: 15px; }
 .big-launch small { color: var(--muted); }
 
@@ -329,14 +342,17 @@ code { font-family: var(--mono); color: var(--text); }
 /* Cards: the edge and tint say which AI; the badge says the status. */
 .card.claude { border-left-color: var(--claude); background: var(--claude-tint); }
 .card.codex { border-left-color: var(--codex); background: var(--codex-tint); }
+.card.shell { border-left-color: var(--shell); background: var(--shell-tint); }
 .card.claude.selected { background: var(--claude-tint-strong); }
 .card.codex.selected { background: var(--codex-tint-strong); }
+.card.shell.selected { background: var(--shell-tint-strong); }
 /* A finished card glows green until clicked; the AI edge color stays. */
 .card.done, .card.done.selected { background: rgba(63, 185, 80, .14); animation: done-glow 1.8s ease-in-out infinite; }
 @keyframes done-glow { 50% { background: rgba(63, 185, 80, .26); } }
 .card-head { display: flex; align-items: center; gap: 6px; }
 .card-head .kind.claude { color: var(--claude); }
 .card-head .kind.codex { color: var(--codex); }
+.card-head .kind.shell { color: var(--shell); }
 .card-title { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card { cursor: pointer; }
 .card-edit {
