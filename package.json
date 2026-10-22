@@ -1,7 +1,7 @@
 {
   "name": "ai-tools-terminal",
   "productName": "AI Tools Terminal",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "管理 Claude Code 與 Codex 的終端機：顯示用量、一鍵開新對話、即時工作狀態",
   "main": "src/main.js",
   "scripts": {
