@@ -814,7 +814,9 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  app.setAppUserModelId('AI Tools Terminal')
+  // Windows takes a notification's icon from the Start menu shortcut with this
+  // ID; the installer creates its shortcuts with the build appId.
+  app.setAppUserModelId(app.isPackaged ? 'com.gkkc6.ai-tools-terminal' : 'AI Tools Terminal')
   hookPort = await startHookServer()
   createWindow()
   startUpdates()
