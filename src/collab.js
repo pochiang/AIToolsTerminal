@@ -12,6 +12,8 @@
 // `open_session` lets a session start a new one to ask (off by default); at
 // most `maxOpened` AI-opened sessions run at once, in the opener's folder.
 
+const path = require('path')
+
 const DEFAULTS = { enabled: true, maxAsksPerTurn: 3, maxDepth: 2, timeoutMin: 10, allowOpen: false, maxOpened: 2 }
 const KIND_NAME = { claude: 'Claude Code', codex: 'Codex' }
 const STATUS_NAME = { working: '工作中', waiting: '等待中', done: '完成' }
@@ -47,13 +49,19 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf, spa
   function listSessions(s) {
     const L = limits()
     const others = [...sessions.values()].filter(o => o.id !== s.id && !o.exited)
+    const same = o => path.resolve(o.cwd).toLowerCase() === path.resolve(s.cwd).toLowerCase()
     const lines = others.map(
-      o => `- ${o.id}｜${KIND_NAME[o.kind]}${o.aiOpened ? '（AI 開啟）' : ''}｜「${titleOf(o)}」｜資料夾 ${o.folder}｜${STATUS_NAME[o.status] || o.status}` +
+      o => `- ${o.id}｜${KIND_NAME[o.kind]}${o.aiOpened ? '（AI 開啟）' : ''}｜「${titleOf(o)}」｜${same(o) ? '與你同資料夾' : `不同資料夾（${o.folder}）`}｜${STATUS_NAME[o.status] || o.status}` +
         (upstream(s).includes(o.id) ? '｜正在等你回覆（不可詢問）' : ''),
     )
+    // Pick by what the other session is working on, not just what it can do.
+    const hint =
+      '只詢問與對方目前工作相關的對話（同資料夾或同主題），不要把無關任務交給正在做別的事的對話；' +
+      (L.allowOpen ? '沒有相關的對話時，請用 open_session 開新的。' : '沒有相關的對話時請自行完成。')
     return ok(
       (lines.length ? `其他對話：\n${lines.join('\n')}` : '目前沒有其他對話。') +
-        `\n\n協作${L.enabled ? '已開啟' : '已關閉'}；本回合剩餘詢問次數 ${Math.max(0, L.maxAsksPerTurn - s.asksThisTurn)}/${L.maxAsksPerTurn}。`,
+        `\n\n${hint}` +
+        `\n協作${L.enabled ? '已開啟' : '已關閉'}；本回合剩餘詢問次數 ${Math.max(0, L.maxAsksPerTurn - s.asksThisTurn)}/${L.maxAsksPerTurn}。`,
     )
   }
 
@@ -155,7 +163,8 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf, spa
     const text =
       `[AI 協作] 來自 ${KIND_NAME[from.kind]}「${titleOf(from)}」（${from.id}）的請求。你這一回合的最後回覆會自動傳回給它。\n\n` +
       `${r.message}\n\n` +
-      `（請直接完成並回覆，不要反問對方${last ? '，也不要再呼叫 ask_session' : ''}。）`
+      `（請直接完成並回覆，不要反問對方${last ? '，也不要再呼叫 ask_session' : ''}。` +
+      '如果這個請求與你目前的工作無關或不適合在這裡做，可以直接回覆拒絕並說明原因，建議對方另開新對話。）'
     t.pty.write(`\x1b[200~${text}\x1b[201~`)
     setTimeout(() => t.pty?.write('\r'), 500)
     update(t)
