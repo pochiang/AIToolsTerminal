@@ -81,7 +81,8 @@ function renderUsage() {
         })
         .join('')
       if (d.error) inner += `<div class="usage-error" title="${esc(d.error)}">⚠</div>`
-      if (d.stale) inner += `<div class="usage-stale">（取自最近紀錄）</div>`
+      // Icons rather than text, so both cards keep the same fixed width.
+      if (d.stale) inner += `<div class="usage-stale" title="取自最近紀錄，可能不是最新">⏱</div>`
     } else if (d.error) {
       inner = `<div class="usage-error">${esc(d.error)}</div>`
     } else {

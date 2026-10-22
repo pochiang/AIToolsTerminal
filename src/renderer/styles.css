@@ -53,6 +53,9 @@ code { font-family: var(--mono); color: var(--text); }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 600; white-space: nowrap; }
 .usage { display: flex; gap: 12px; flex: 1; min-width: 0; overflow-x: auto; }
 .usage-group {
+  /* Fixed width so the Claude and Codex cards line up whatever they show. */
+  flex: none;
+  width: 440px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -62,7 +65,8 @@ code { font-family: var(--mono); color: var(--text); }
   border-radius: var(--radius);
   white-space: nowrap;
 }
-.usage-name { display: flex; flex-direction: column; font-weight: 600; min-width: 64px; }
+.usage-name { display: flex; flex-direction: column; font-weight: 600; flex: none; width: 92px; }
+.usage-name > * { overflow: hidden; text-overflow: ellipsis; }
 .usage-name small { color: var(--muted); font-weight: 400; font-size: 11px; text-transform: uppercase; }
 .usage-group.claude .usage-name span { color: var(--claude); }
 .usage-group.codex .usage-name span { color: var(--codex); }
@@ -72,7 +76,8 @@ code { font-family: var(--mono); color: var(--text); }
 .usage-group .usage-name span.ver.err { color: var(--danger); }
 .usage-group.claude { background: var(--claude-tint); border-color: rgba(224,122,95,.3); border-left: 3px solid var(--claude); }
 .usage-group.codex { background: var(--codex-tint); border-color: rgba(169,155,255,.3); border-left: 3px solid var(--codex); }
-.meter { display: flex; flex-direction: column; gap: 3px; min-width: 150px; }
+.meter { display: flex; flex-direction: column; gap: 3px; flex: 1 1 0; min-width: 0; }
+.meter-head span, .meter-reset { overflow: hidden; text-overflow: ellipsis; }
 .meter-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
 .meter-head b { font-variant-numeric: tabular-nums; }
 .meter-bar { height: 6px; background: #2a3042; border-radius: 3px; overflow: hidden; }
@@ -80,8 +85,9 @@ code { font-family: var(--mono); color: var(--text); }
 .meter-fill.mid { background: var(--waiting); }
 .meter-fill.high { background: var(--danger); }
 .meter-reset { font-size: 11px; color: var(--muted); }
-.usage-error { color: var(--muted); font-size: 12px; max-width: 260px; white-space: normal; }
-.usage-stale { color: var(--dim); font-size: 11px; }
+.usage-error { flex: 1; min-width: 0; color: var(--muted); font-size: 12px; white-space: normal; }
+.meter ~ .usage-error, .usage-stale { flex: none; cursor: help; }
+.usage-stale { color: var(--dim); font-size: 12px; }
 .icon-btn {
   background: var(--bg-3);
   border: 1px solid var(--line);
