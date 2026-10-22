@@ -19,28 +19,8 @@
   </header>
 
   <div class="body">
-    <aside class="git-panel" id="git-panel" hidden>
-      <div class="panel-head">
-        <h3>Git</h3>
-        <span class="git-branch" id="git-branch"></span>
-        <button class="mini-btn" id="git-refresh" title="重新整理">⟳</button>
-        <button class="mini-btn" id="git-close" title="收起">‹</button>
-      </div>
-      <div class="git-actions">
-        <button class="git-act" id="git-pull" title="git pull">↓ 拉取<span class="n" id="git-behind"></span></button>
-        <button class="git-act" id="git-push" title="git push">↑ 推送<span class="n" id="git-ahead"></span></button>
-      </div>
-      <div class="git-section" id="git-changes"></div>
-      <div class="git-commit-box" id="git-commit-box">
-        <textarea id="git-message" rows="2" placeholder="提交訊息（Ctrl+Enter 提交）"></textarea>
-        <button class="git-commit-btn" id="git-commit">✓ 提交</button>
-      </div>
-      <div class="git-section git-log" id="git-log"></div>
-    </aside>
-
     <main class="workspace">
       <div class="toolbar">
-        <button class="git-toggle" id="git-toggle" title="顯示 Git 面板" hidden>⑂ Git</button>
         <div class="dir-wrap">
           <button class="dir-btn" id="dir-btn" title="新對話的工作資料夾">
             <span class="dir-icon">📁</span><span id="dir-label"></span><span class="caret">▾</span>
@@ -86,31 +66,52 @@
       </section>
     </main>
 
-    <aside class="status-panel">
-      <div class="panel-head">
-        <h3>工作狀況</h3>
-        <button class="collab-btn" id="collab-btn" title="AI 協作設定"></button>
-        <div class="collab-menu" id="collab-menu" hidden>
-          <label class="switch-row">
-            <span>允許 AI 互相詢問</span>
-            <input type="checkbox" role="switch" class="toggle" id="collab-enabled" />
-          </label>
-          <p class="hint">Claude Code 與 Codex 可用 <code>ask_session</code> 把問題送進另一個對話並取回回覆。反問正在等自己的對話一律禁止。</p>
-          <label class="num-row">每回合最多詢問<input type="number" id="collab-asks" min="1" max="20" />次</label>
-          <label class="num-row">最多轉介<input type="number" id="collab-depth" min="1" max="5" />層</label>
-          <label class="num-row">等待逾時<input type="number" id="collab-timeout" min="1" max="60" />分鐘</label>
-          <p class="hint">「回合」從你在該對話按下 Enter 起算；轉介層數 1 = 只能直接詢問，對方不能再轉問別人。</p>
-          <label class="switch-row">
-            <span>允許 AI 開新對話</span>
-            <input type="checkbox" role="switch" class="toggle" id="collab-open" />
-          </label>
-          <label class="num-row">AI 最多同時開<input type="number" id="collab-max-open" min="1" max="5" />個</label>
-          <p class="hint">沒有可詢問的對話時，AI 可用 <code>open_session</code> 在背景開一個新頁籤（標上 [AI]，與發起方同資料夾）。每個新對話都會消耗用量。</p>
-          <button class="stop-btn" id="collab-stop">停止所有進行中的協作</button>
+    <div class="side">
+      <aside class="status-panel">
+        <div class="panel-head">
+          <h3>工作狀況</h3>
+          <button class="collab-btn" id="collab-btn" title="AI 協作設定"></button>
+          <div class="collab-menu" id="collab-menu" hidden>
+            <label class="switch-row">
+              <span>允許 AI 互相詢問</span>
+              <input type="checkbox" role="switch" class="toggle" id="collab-enabled" />
+            </label>
+            <p class="hint">Claude Code 與 Codex 可用 <code>ask_session</code> 把問題送進另一個對話並取回回覆。反問正在等自己的對話一律禁止。</p>
+            <label class="num-row">每回合最多詢問<input type="number" id="collab-asks" min="1" max="20" />次</label>
+            <label class="num-row">最多轉介<input type="number" id="collab-depth" min="1" max="5" />層</label>
+            <label class="num-row">等待逾時<input type="number" id="collab-timeout" min="1" max="60" />分鐘</label>
+            <p class="hint">「回合」從你在該對話按下 Enter 起算；轉介層數 1 = 只能直接詢問，對方不能再轉問別人。</p>
+            <label class="switch-row">
+              <span>允許 AI 開新對話</span>
+              <input type="checkbox" role="switch" class="toggle" id="collab-open" />
+            </label>
+            <label class="num-row">AI 最多同時開<input type="number" id="collab-max-open" min="1" max="5" />個</label>
+            <p class="hint">沒有可詢問的對話時，AI 可用 <code>open_session</code> 在背景開一個新頁籤（標上 [AI]，與發起方同資料夾）。每個新對話都會消耗用量。</p>
+            <button class="stop-btn" id="collab-stop">停止所有進行中的協作</button>
+          </div>
         </div>
-      </div>
-      <div class="status-groups" id="status-groups"></div>
-    </aside>
+        <div class="status-groups" id="status-groups"></div>
+      </aside>
+      <div class="side-split" id="side-split" title="拖拉調整高度" hidden></div>
+      <aside class="git-panel" id="git-panel" hidden>
+        <div class="panel-head">
+          <h3>Git</h3>
+          <span class="git-branch" id="git-branch"></span>
+          <button class="mini-btn" id="git-refresh" title="重新整理">⟳</button>
+          <button class="mini-btn" id="git-close" title="收起">▾</button>
+        </div>
+        <div class="git-actions">
+          <button class="git-act" id="git-pull" title="git pull">↓ 拉取<span class="n" id="git-behind"></span></button>
+          <button class="git-act" id="git-push" title="git push">↑ 推送<span class="n" id="git-ahead"></span></button>
+        </div>
+        <div class="git-section" id="git-changes"></div>
+        <div class="git-commit-box" id="git-commit-box">
+          <textarea id="git-message" rows="2" placeholder="提交訊息（Ctrl+Enter 提交）"></textarea>
+          <button class="git-commit-btn" id="git-commit">✓ 提交</button>
+        </div>
+        <div class="git-section git-log" id="git-log"></div>
+      </aside>
+    </div>
   </div>
 
   <div class="toast" id="toast" hidden></div>

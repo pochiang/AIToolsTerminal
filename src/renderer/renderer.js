@@ -541,6 +541,8 @@ $('collab-stop').addEventListener('click', () => api.stopCollab())
 
 const gitState = { cwd: null, sig: '', busy: false, data: null, hidden: false, unchecked: new Set(), op: null }
 try { gitState.hidden = localStorage.getItem('gitHidden') === '1' } catch {}
+// Height of the expanded Git panel, set by dragging the splitter above it.
+try { gitState.height = Number(localStorage.getItem('gitHeight')) || null } catch {}
 
 const LANE_W = 14
 const ROW_H = 24
@@ -714,8 +716,14 @@ function changeCode(code) {
 function renderGit() {
   const d = gitState.data
   const isRepo = !!d?.isRepo
-  $('git-toggle').hidden = !isRepo || !gitState.hidden
-  $('git-panel').hidden = !isRepo || gitState.hidden
+  // Collapsed, the panel shrinks to its header bar at the bottom right.
+  const panel = $('git-panel')
+  panel.hidden = !isRepo
+  panel.classList.toggle('collapsed', gitState.hidden)
+  panel.style.flexBasis = !gitState.hidden && gitState.height ? `${gitState.height}px` : ''
+  $('side-split').hidden = !isRepo || gitState.hidden
+  $('git-close').textContent = gitState.hidden ? '▴' : '▾'
+  $('git-close').title = gitState.hidden ? '展開' : '收起'
   if (!isRepo) return
 
   const sync = d.tracking ? ` <span class="sync">${esc(d.tracking.replace(/ahead /g, '↑').replace(/behind /g, '↓').replace(/,/g, ''))}</span>` : ''
@@ -1025,8 +1033,31 @@ $('viewer-body').addEventListener('click', e => {
   if (toggle) $('dfile-' + toggle.dataset.toggle).classList.toggle('collapsed')
 })
 $('git-refresh').addEventListener('click', () => refreshGit(true))
-$('git-close').addEventListener('click', () => setGitHidden(true))
-$('git-toggle').addEventListener('click', () => setGitHidden(false))
+$('git-close').addEventListener('click', () => setGitHidden(!gitState.hidden))
+// The collapsed bar expands on a click anywhere outside its buttons.
+document.querySelector('#git-panel .panel-head').addEventListener('click', e => {
+  if (gitState.hidden && !e.target.closest('button')) setGitHidden(false)
+})
+$('side-split').addEventListener('mousedown', e => {
+  e.preventDefault()
+  const side = $('side-split').parentElement.getBoundingClientRect()
+  const split = $('side-split')
+  split.classList.add('dragging')
+  const move = ev => {
+    // Leave room for the status panel above (its min-height) and a usable Git panel.
+    const h = Math.round(Math.min(side.height - 160, Math.max(120, side.bottom - ev.clientY)))
+    gitState.height = h
+    $('git-panel').style.flexBasis = `${h}px`
+  }
+  const up = () => {
+    split.classList.remove('dragging')
+    document.removeEventListener('mousemove', move)
+    document.removeEventListener('mouseup', up)
+    try { localStorage.setItem('gitHeight', String(gitState.height)) } catch {}
+  }
+  document.addEventListener('mousemove', move)
+  document.addEventListener('mouseup', up)
+})
 setInterval(refreshGit, 4000)
 
 // ---------- events ----------
