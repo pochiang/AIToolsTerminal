@@ -87,6 +87,18 @@ code { font-family: var(--mono); color: var(--text); }
   font-size: 16px;
 }
 .icon-btn:hover { border-color: var(--muted); }
+.update-btn {
+  height: 34px;
+  padding: 0 12px;
+  white-space: nowrap;
+  background: rgba(63, 185, 80, .14);
+  color: var(--done);
+  border: 1px solid var(--done);
+  border-radius: var(--radius);
+  font-weight: 600;
+}
+.update-btn:hover:not(:disabled) { background: rgba(63, 185, 80, .24); }
+.update-btn:disabled { opacity: .7; cursor: default; }
 .icon-btn.spin { animation: spin .8s linear; }
 @keyframes spin { to { transform: rotate(360deg); } }
 

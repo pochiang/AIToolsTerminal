@@ -1033,6 +1033,25 @@ setInterval(refreshGit, 4000)
 for (const b of document.querySelectorAll('[data-kind]')) {
   b.addEventListener('click', () => launch(b.dataset.kind))
 }
+// Shown only when the checkout is behind its remote branch.
+function renderAppUpdate() {
+  const u = state.appUpdate || {}
+  const b = $('app-update')
+  b.hidden = u.state !== 'available' && u.state !== 'updating'
+  b.disabled = u.state === 'updating'
+  const to = u.version && u.version !== state.version ? ` 到 v${u.version}` : ''
+  b.textContent = u.state === 'updating' ? '更新中…' : `⬆ 更新${to}`
+  b.title = u.state === 'available' ? `GitHub 上有 ${u.behind} 個新的 commit，按下後下載並重開` : ''
+}
+api.onAppUpdate(u => {
+  state.appUpdate = u
+  renderAppUpdate()
+})
+$('app-update').addEventListener('click', async () => {
+  const r = await api.runAppUpdate()
+  if (r.error) toast(r.error)
+})
+
 $('refresh-usage').addEventListener('click', e => {
   e.currentTarget.classList.remove('spin')
   void e.currentTarget.offsetWidth
@@ -1100,8 +1119,11 @@ ro.observe($('terms'))
 
 setInterval(renderUsage, 30000)
 
-api.init().then(async ({ config, usage, updates, sessions }) => {
+api.init().then(async ({ config, usage, updates, sessions, version, appUpdate }) => {
   state.config = config
+  state.version = version
+  state.appUpdate = appUpdate
+  renderAppUpdate()
   state.usage = usage
   state.updates = updates
   renderDir()

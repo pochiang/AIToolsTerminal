@@ -11,6 +11,7 @@ const { createCollab } = require('./collab')
 const gitOps = require('./git')
 const { readRepo, workingDiff, showCommit } = gitOps
 const { updateCli } = require('./updater')
+const selfUpdate = require('./self-update')
 
 // Markers of a parent Claude Code session (when this app is started from one);
 // children that inherit them think they are nested and stop saving transcripts.
@@ -587,8 +588,44 @@ ipcMain.handle('app:init', () => {
     usage: usageState,
     updates: updateState,
     sessions: [...sessions.values()].map(publicSession),
+    version: app.getVersion(),
+    appUpdate,
   }
 })
+// ---------- app self-update ----------
+
+let appUpdate = { state: 'off' }
+async function checkAppUpdate() {
+  if (appUpdate.state === 'updating') return
+  appUpdate = await selfUpdate.check()
+  send('app-update:state', appUpdate)
+}
+ipcMain.handle('app-update:run', async () => {
+  const working = [...sessions.values()].filter(s => s.status === 'working' && !s.exited)
+  if (working.length) {
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'warning',
+      buttons: ['更新並重開', '取消'],
+      defaultId: 1,
+      cancelId: 1,
+      message: `有 ${working.length} 個對話正在工作`,
+      detail: '更新後 App 會重開，進行中的工作會被中斷；頁籤與對話會在重開後自動接回。',
+    })
+    if (response !== 0) return {}
+  }
+  const prev = appUpdate
+  appUpdate = { ...prev, state: 'updating' }
+  send('app-update:state', appUpdate)
+  const r = await selfUpdate.apply()
+  if (r.error) {
+    appUpdate = prev
+    send('app-update:state', appUpdate)
+    return { error: r.error }
+  }
+  selfUpdate.relaunch(app, r.needInstall)
+  return {}
+})
+
 ipcMain.on('tabs:restored', () => {
   restoring = false
   saveTabs()
@@ -732,6 +769,10 @@ app.whenReady().then(async () => {
   refreshClaude()
   refreshCodex()
   setInterval(pollCodex, 1000)
+  if (selfUpdate.supported(app.isPackaged)) {
+    setTimeout(checkAppUpdate, 5000)
+    setInterval(checkAppUpdate, 30 * 60000)
+  }
 })
 
 app.on('before-quit', () => {
