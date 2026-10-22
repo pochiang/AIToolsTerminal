@@ -1041,7 +1041,9 @@ function renderAppUpdate() {
   b.disabled = u.state === 'updating'
   const to = u.version && u.version !== state.version ? ` 到 v${u.version}` : ''
   b.textContent = u.state === 'updating' ? '更新中…' : `⬆ 更新${to}`
-  b.title = u.state === 'available' ? `GitHub 上有 ${u.behind} 個新的 commit，按下後下載並重開` : ''
+  b.title = u.state !== 'available' ? ''
+    : u.ready ? `新版本 v${u.version} 已下載，按下後安裝並重開（不按的話會在關閉 App 時安裝）`
+    : `GitHub 上有 ${u.behind} 個新的 commit，按下後下載並重開`
 }
 api.onAppUpdate(u => {
   state.appUpdate = u

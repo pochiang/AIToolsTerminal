@@ -594,9 +594,21 @@ ipcMain.handle('app:init', () => {
 })
 // ---------- app self-update ----------
 
+// From a git checkout: pull and relaunch. Installed: electron-updater downloads
+// the new installer from GitHub Releases in the background; the button then
+// installs it now, otherwise it installs when the app quits.
 let appUpdate = { state: 'off' }
+const autoUpdater = app.isPackaged ? require('electron-updater').autoUpdater : null
+if (autoUpdater) {
+  autoUpdater.on('update-downloaded', info => {
+    appUpdate = { state: 'available', version: info.version, ready: true }
+    send('app-update:state', appUpdate)
+  })
+  autoUpdater.on('error', e => console.error('auto-update:', e?.message || e))
+}
 async function checkAppUpdate() {
   if (appUpdate.state === 'updating') return
+  if (autoUpdater) return autoUpdater.checkForUpdates().catch(() => {})
   appUpdate = await selfUpdate.check()
   send('app-update:state', appUpdate)
 }
@@ -612,6 +624,11 @@ ipcMain.handle('app-update:run', async () => {
       detail: '更新後 App 會重開，進行中的工作會被中斷；頁籤與對話會在重開後自動接回。',
     })
     if (response !== 0) return {}
+  }
+  if (autoUpdater) {
+    // Silent install into the same folder, then start the app again.
+    autoUpdater.quitAndInstall(true, true)
+    return {}
   }
   const prev = appUpdate
   appUpdate = { ...prev, state: 'updating' }
@@ -769,7 +786,7 @@ app.whenReady().then(async () => {
   refreshClaude()
   refreshCodex()
   setInterval(pollCodex, 1000)
-  if (selfUpdate.supported(app.isPackaged)) {
+  if (autoUpdater || selfUpdate.supported(app.isPackaged)) {
     setTimeout(checkAppUpdate, 5000)
     setInterval(checkAppUpdate, 30 * 60000)
   }

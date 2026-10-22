@@ -27,6 +27,11 @@
 執行 `dist\AI-Tools-Terminal-Setup-<版本>.exe`，可選安裝位置，會建立桌面與開始功能表捷徑。不需要另外安裝 Node.js。
 安裝包沒有數位簽章，第一次執行時 Windows SmartScreen 會警告，按「其他資訊 → 仍要執行」。
 
+### 更新
+
+- 安裝包版本（0.3.0 起）：在背景從 GitHub Releases 下載新版，右上角出現「⬆ 更新到 v…」，按下立即安裝並重開；不按的話會在關閉 App 時安裝。
+- 原始碼版本（`.git` 資料夾存在時）：GitHub 有新 commit 時出現同一個按鈕，按下執行 `git pull --ff-only` 後重開；`package-lock.json` 有變動時會在另一個視窗跑 `npm ci`。有未提交改動或未推送的 commit 時不會更新。
+
 ### 從原始碼執行／重新打包
 
 需要 Node.js 20 以上。複製整個資料夾（不含 `node_modules`、`dist`），然後：
@@ -36,6 +41,8 @@ npm ci           # 依 package-lock.json 安裝（會下載 Electron）
 npm start        # 開發模式執行，或雙擊 start.cmd
 npm run dist     # 產生 dist\AI-Tools-Terminal-Setup-<版本>.exe
 ```
+
+發布新版：改 `package.json` 版本、`npm run dist`，再把 `dist` 裡的安裝包、`.blockmap` 與 `latest.yml` 一起上傳到同版本的 GitHub Release（例如 `gh release create v0.3.0 dist\AI-Tools-Terminal-Setup-0.3.0.exe dist\AI-Tools-Terminal-Setup-0.3.0.exe.blockmap dist\latest.yml`）。少了 `latest.yml`，已安裝的 App 不會偵測到新版。
 
 設定（最近資料夾、協作限制）存在 `%APPDATA%\AI Tools Terminal\config.json`，不會跟著專案搬，新電腦會用預設值。
 
