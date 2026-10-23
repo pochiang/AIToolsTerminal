@@ -407,7 +407,9 @@ const WAVE = '<svg viewBox="0 0 80 10" preserveAspectRatio="none"><path d="M0 5 
 const wavePhase = sec => `animation-delay:-${(Date.now() % (sec * 1000)) / 1000}s`
 
 /** A vertical tank whose water level is how full the conversation's context is. */
-function contextTank({ used, window }) {
+function contextTank(ctx) {
+  if (!ctx) return '<div class="tank" title="Context：尚無資料"><span class="tank-pct">—</span></div>'
+  const { used, window } = ctx
   const pct = Math.min(100, Math.round((used / window) * 100))
   const cls = pct >= 85 ? 'high' : pct >= 60 ? 'mid' : ''
   return `<div class="tank ${cls}" title="Context：已使用 ${used.toLocaleString()} / ${window.toLocaleString()} tokens（${kTokens(used)}/${kTokens(window)}）">
@@ -422,6 +424,7 @@ function contextTank({ used, window }) {
 function card(s) {
   const meta = !s.context && s.tokens ? `<div class="card-meta">${s.tokens.toLocaleString()} tokens</div>` : ''
   const c = s.collab || {}
+  // One line between title and folder keeps every card the same height.
   const collabLine = c.asking
     ? `<div class="card-collab">⇄ ${c.asking.queued ? '排隊等待' : '正在詢問'}「${esc(c.asking.title)}」</div>`
     : c.serving
@@ -436,11 +439,10 @@ function card(s) {
       <button class="card-edit" data-edit="${s.id}" title="重新命名">✎</button>
       <span class="badge ${s.status}"><span class="dot ${s.status}"></span>${STATUS[s.status]?.label ?? ''}</span>
     </div>
-    ${s.detail ? `<div class="card-detail">${esc(s.detail)}</div>` : ''}
-    ${collabLine}${meta}
+    ${collabLine || (s.detail ? `<div class="card-detail" title="${esc(s.detail)}">${esc(s.detail)}</div>` : meta || '<div class="card-meta"></div>')}
     <div class="card-dir" title="${esc(s.cwd)}"><bdi dir="ltr">${esc(s.cwd)}</bdi></div>
     </div>
-    ${s.context ? contextTank(s.context) : ''}
+    ${s.kind === 'shell' ? '' : contextTank(s.context)}
   </div>`
 }
 
