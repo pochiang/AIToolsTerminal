@@ -210,6 +210,8 @@ function claudeHookSettings(id) {
     timeout: 5,
   }]
   const settings = {
+    // The status line receives the context window size and usage; report it.
+    statusLine: { type: 'command', command: cmd('StatusLine')[0].command, padding: 0 },
     // The tool's top bar already shows quotas; drop the in-terminal usage band.
     enabledPlugins: { 'usage-bars@gkkc6-mods': false },
     permissions: { allow: ['mcp__aitt__list_sessions', 'mcp__aitt__ask_session', 'mcp__aitt__open_session'] },
@@ -240,6 +242,28 @@ function lastClaudeReply(transcript) {
     }
   } catch {}
   return null
+}
+
+/** Context fill of a Claude conversation from its last assistant turn's usage. */
+function claudeContext(transcript, window) {
+  try {
+    const lines = usage.tail(transcript, 256 * 1024).split('\n').reverse()
+    for (const line of lines) {
+      if (!line.includes('"usage"')) continue
+      const msg = JSON.parse(line)
+      const u = msg.type === 'assistant' && !msg.isSidechain && msg.message?.usage
+      if (!u) continue
+      const used = (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0)
+      return { used, window: window || 200000 }
+    }
+  } catch {}
+  return null
+}
+
+function setContext(s, ctx) {
+  if (!ctx || !(ctx.window > 0) || (s.context && s.context.used === ctx.used && s.context.window === ctx.window)) return false
+  s.context = ctx
+  return true
 }
 
 // ---------- CLI updates ----------
@@ -323,6 +347,7 @@ function createSession(kind, cwd, cols, rows, restore = {}) {
     lastPrompt: null,
     lastReply: null,
     tokens: null,
+    context: null,
     pty: p,
     outBuf: '',
     oscTail: '',
@@ -417,6 +442,20 @@ function handleHook({ session, event, payload }) {
     s.convId = payload.session_id
     saveTabs()
   }
+  if (event === 'StatusLine') {
+    const cw = payload.context_window
+    const cu = cw?.current_usage
+    const window = cw?.context_window_size
+    let ctx = null
+    if (window && cu) ctx = { used: (cu.input_tokens || 0) + (cu.cache_creation_input_tokens || 0) + (cu.cache_read_input_tokens || 0), window }
+    else if (window && typeof cw.used_percentage === 'number') ctx = { used: Math.round(window * cw.used_percentage / 100), window }
+    else if (payload.transcript_path) ctx = claudeContext(payload.transcript_path, window || s.context?.window)
+    if (setContext(s, ctx)) send('session:update', publicSession(s))
+    return
+  }
+  // Fallback when no status line runs (e.g. another one overrides it).
+  if ((event === 'PostToolUse' || event === 'Stop') && payload.transcript_path)
+    setContext(s, claudeContext(payload.transcript_path, s.context?.window))
   switch (event) {
     case 'UserPromptSubmit':
       s.everWorked = true
@@ -550,6 +589,8 @@ function handleCodexLine(s, obj) {
     } else if (p.type === 'token_count') {
       const total = p.info?.total_token_usage?.total_tokens
       if (total) s.tokens = total
+      const last = p.info?.last_token_usage?.total_tokens
+      if (last != null && p.info?.model_context_window) setContext(s, { used: last, window: p.info.model_context_window })
       const limits = usage.codexWindows(p.rate_limits)
       if (limits.length) {
         usageState.codex = { limits, plan: p.rate_limits.plan_type || usageState.codex.plan, updatedAt: Date.now() }

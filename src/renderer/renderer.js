@@ -398,8 +398,29 @@ function renderStatus() {
     : '<div class="group-empty">還沒有對話，從左邊開啟 Claude Code 或 Codex</div>'
 }
 
+const kTokens = n => (n >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n))
+
+const WAVE = '<svg viewBox="0 0 80 10" preserveAspectRatio="none"><path d="M0 5 Q10 0 20 5 T40 5 T60 5 T80 5 V10 H0 Z"/></svg>'
+
+// Cards are re-rendered on every update; start each wave at the phase it
+// would be in by now so the water keeps flowing instead of jumping back.
+const wavePhase = sec => `animation-delay:-${(Date.now() % (sec * 1000)) / 1000}s`
+
+/** A vertical tank whose water level is how full the conversation's context is. */
+function contextTank({ used, window }) {
+  const pct = Math.min(100, Math.round((used / window) * 100))
+  const cls = pct >= 85 ? 'high' : pct >= 60 ? 'mid' : ''
+  return `<div class="tank ${cls}" title="Context：已使用 ${used.toLocaleString()} / ${window.toLocaleString()} tokens（${kTokens(used)}/${kTokens(window)}）">
+    <div class="tank-water" style="height:${pct}%">
+      <div class="tank-wave back" style="${wavePhase(3.2)}">${WAVE}</div>
+      <div class="tank-wave" style="${wavePhase(2.2)}">${WAVE}</div>
+    </div>
+    <span class="tank-pct">${pct}%</span>
+  </div>`
+}
+
 function card(s) {
-  const meta = s.tokens ? `<div class="card-meta">${s.tokens.toLocaleString()} tokens</div>` : ''
+  const meta = !s.context && s.tokens ? `<div class="card-meta">${s.tokens.toLocaleString()} tokens</div>` : ''
   const c = s.collab || {}
   const collabLine = c.asking
     ? `<div class="card-collab">⇄ ${c.asking.queued ? '排隊等待' : '正在詢問'}「${esc(c.asking.title)}」</div>`
@@ -407,6 +428,7 @@ function card(s) {
       ? `<div class="card-collab">⇄ 正在回覆「${esc(c.serving.title)}」的請求</div>`
       : ''
   return `<div class="card ${s.status} ${s.kind} ${s.id === state.active ? 'selected' : ''}" data-id="${s.id}" role="button" tabindex="0">
+    <div class="card-main">
     <div class="card-head">
       <span class="kind ${s.kind}">${KIND[s.kind].icon}</span>
       ${s.aiOpened ? '<span class="ai-tag" title="由 AI 開啟">[AI]</span>' : ''}
@@ -417,6 +439,8 @@ function card(s) {
     ${s.detail ? `<div class="card-detail">${esc(s.detail)}</div>` : ''}
     ${collabLine}${meta}
     <div class="card-dir" title="${esc(s.cwd)}"><bdi dir="ltr">${esc(s.cwd)}</bdi></div>
+    </div>
+    ${s.context ? contextTank(s.context) : ''}
   </div>`
 }
 

@@ -341,7 +341,7 @@ code { font-family: var(--mono); color: var(--text); }
 .group-title .count { color: var(--dim); font-weight: 400; }
 .group-empty { margin: 8px 4px; color: var(--dim); font-size: 12px; }
 .card {
-  display: block; width: 100%; text-align: left;
+  display: flex; gap: 10px; width: 100%; text-align: left;
   background: var(--bg-2);
   border: 1px solid var(--line);
   border-left: 3px solid var(--dim);
@@ -393,6 +393,36 @@ code { font-family: var(--mono); color: var(--text); }
 .card.waiting .card-detail { color: #ffd27a; }
 .card.done .card-detail { color: #7fd88e; }
 .card-meta { margin-top: 4px; color: var(--dim); font-size: 11px; }
+/* Context tank: water rises with how full the conversation's context is. */
+.card-main { flex: 1; min-width: 0; }
+.tank {
+  --water: var(--working);
+  position: relative; flex: none; align-self: stretch;
+  width: 38px; min-height: 58px;
+  border: 1px solid #343b50; border-radius: 7px;
+  background: #10131b; overflow: hidden;
+}
+.tank.mid { --water: var(--waiting); }
+.tank.high { --water: var(--danger); }
+.tank-water {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  background: color-mix(in srgb, var(--water) 55%, transparent);
+  transition: height .6s ease;
+}
+.tank-wave {
+  position: absolute; left: 0; bottom: 100%; margin-bottom: -1px;
+  width: 200%; height: 6px;
+  animation: tank-wave 2.2s linear infinite;
+}
+.tank-wave svg { display: block; width: 100%; height: 100%; fill: color-mix(in srgb, var(--water) 55%, transparent); }
+.tank-wave.back { height: 8px; opacity: .55; animation-duration: 3.2s; animation-direction: reverse; }
+@keyframes tank-wave { to { transform: translateX(-50%); } }
+.tank-pct {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+  color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .8);
+}
 
 /* ---------- git panel ---------- */
 .git-panel {
