@@ -21,7 +21,22 @@ $manager = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessi
 $hasCover = $false
 if ($env:AITT_COVER_DLL) { try { Add-Type -Path $env:AITT_COVER_DLL; $hasCover = $true } catch {} }
 $lastKey = $null
-$coverTries = 0
+$tries = 0
+$coverSent = $false
+$site = $null
+
+# A browser only reports itself; the site playing (YouTube, ...) is guessed from
+# the browser's window titles, preferring one that contains the track title.
+$sites = 'YouTube Music', 'YouTube', 'Netflix', 'Twitch', 'SoundCloud', 'bilibili', 'Spotify', 'Apple Music'
+function Site($app, $title) {
+  $proc = if ($app -match 'chrome') { 'chrome' } elseif ($app -match 'edge') { 'msedge' }
+    elseif ($app -match 'firefox|308046B0AF4A39CB') { 'firefox' } elseif ($app -match 'brave') { 'brave' }
+    elseif ($app -match 'opera') { 'opera' } else { return $null }
+  $titles = @(Get-Process -Name $proc -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle } | ForEach-Object { $_.MainWindowTitle })
+  $titles = @($titles | Where-Object { $title -and $_.Contains($title) }) + $titles
+  foreach ($t in $titles) { foreach ($name in $sites) { if ($t -match [regex]::Escape($name)) { return $name } } }
+  $null
+}
 
 function Poll {
   $s = $manager.GetCurrentSession()
@@ -36,22 +51,27 @@ function Poll {
     canPrev = $info.Controls.IsPreviousEnabled
     canNext = $info.Controls.IsNextEnabled
   }
-  # The cover travels once per track. Players often set it a moment after the
-  # title, so keep trying for a few polls.
+  # The cover travels once per track. Players often set it (and browsers their
+  # window title) a moment after the track changes, so retry for a few polls.
   $key = "$($r.app)|$($r.title)|$($r.artist)"
   if ($key -ne $script:lastKey) {
     $script:lastKey = $key
-    $script:coverTries = 0
-    $r.newTrack = $true
+    $script:tries = 0
+    $script:coverSent = $false
+    $script:site = $null
   }
-  if ($hasCover -and $script:coverTries -lt 5) {
-    $script:coverTries++
-    try { $cover = [AittCover]::Read($s) } catch { $cover = $null }
-    if ($cover) {
-      $r.cover = $cover
-      $script:coverTries = 5
+  if ($script:tries -lt 5) {
+    $script:tries++
+    if ($hasCover -and -not $script:coverSent) {
+      try { $cover = [AittCover]::Read($s) } catch { $cover = $null }
+      if ($cover) {
+        $r.cover = $cover
+        $script:coverSent = $true
+      }
     }
+    if (-not $script:site) { try { $script:site = Site $r.app $r.title } catch {} }
   }
+  $r.site = $script:site
   $r
 }
 

@@ -1118,10 +1118,34 @@ $('app-update').addEventListener('click', async () => {
 // ---------- now playing ----------
 
 // Whatever Windows' media keys control right now (Spotify, a browser tab, ...).
-function mediaSource(app) {
-  const a = app || ''
-  const known = [[/spotify/i, 'Spotify'], [/chrome/i, 'Chrome'], [/msedge|edge/i, 'Edge'], [/firefox/i, 'Firefox'], [/zunemusic|music/i, '媒體播放器']]
-  return known.find(([re]) => re.test(a))?.[1] || a.split('!').pop().replace(/\.exe$/i, '')
+// Simplified brand marks, 16×16, for where the media comes from.
+const MEDIA_ICONS = {
+  spotify: '<circle cx="8" cy="8" r="8" fill="#1db954"/><path d="M4 6.2c2.7-.8 5.6-.6 8 .7M4.6 8.6c2.2-.6 4.5-.4 6.4.6M5.2 10.8c1.7-.4 3.4-.3 4.9.4" stroke="#111" stroke-width="1.3" fill="none" stroke-linecap="round"/>',
+  youtube: '<rect x="0" y="2.5" width="16" height="11" rx="3" fill="#ff0033"/><path d="M6.5 5.4v5.2L11 8z" fill="#fff"/>',
+  ytmusic: '<circle cx="8" cy="8" r="8" fill="#ff0033"/><circle cx="8" cy="8" r="4.6" stroke="#fff" stroke-width="1.1" fill="none"/><path d="M6.8 6v4L10 8z" fill="#fff"/>',
+  netflix: '<rect width="16" height="16" rx="3" fill="#111"/><path d="M5 3h2.2l1.8 5.6V3H11v10H8.8L7 7.4V13H5z" fill="#e50914"/>',
+  twitch: '<path d="M2.5 1 1.5 3.5V13h3v2h2l2-2h2.5l3.5-3.5V1z" fill="#9146ff"/><path d="M7 4.5h1.3v3.6H7zm3.4 0h1.3v3.6h-1.3z" fill="#fff"/>',
+  soundcloud: '<path d="M6 12V6.2a4 4 0 0 1 7 2.5A2.2 2.2 0 0 1 13 12.9H6zM1 12V9h1v3zm2 0V7.5h1V12zm2 0V6.5h.7V12z" fill="#ff5500"/>',
+  bilibili: '<rect x=".5" y="3.5" width="15" height="11" rx="2.5" fill="#00a1d6"/><path d="M4.5 1.5 6.5 3.5M11.5 1.5 9.5 3.5" stroke="#00a1d6" stroke-width="1.3" stroke-linecap="round"/><path d="M5 8v1.5M11 8v1.5" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/>',
+  apple: '<rect width="16" height="16" rx="4" fill="#fa2d48"/><path d="M10.8 3.2v6.6a1.6 1.6 0 1 1-1-1.5V5.4L6.6 6.1v5a1.6 1.6 0 1 1-1-1.5V4.6z" fill="#fff"/>',
+  chrome: '<circle cx="8" cy="8" r="8" fill="#ea4335"/><path d="M8 8 1.1 4A8 8 0 0 0 8 16z" fill="#34a853"/><path d="M8 8h6.9A8 8 0 0 1 8 16z" fill="#fbbc04"/><circle cx="8" cy="8" r="3.6" fill="#fff"/><circle cx="8" cy="8" r="2.7" fill="#4285f4"/>',
+  edge: '<circle cx="8" cy="8" r="8" fill="#0c84d8"/><path d="M3 9.5c.6-3.5 5-5.4 8.2-3.2 1.5 1 1.6 3 .2 3.6-1.4.6-4.5.2-4.5 2 0 1.4 2.2 2 4.2 1.4A6.5 6.5 0 0 1 3 9.5z" fill="#42e08a"/>',
+  firefox: '<circle cx="8" cy="8" r="8" fill="#ff7139"/><circle cx="8.6" cy="8.4" r="4.4" fill="#7542e5"/><path d="M2 6.5c1-3 4-4.6 7-4.2-2 .7-3.2 2.4-3.2 4.2" fill="#ffbd4f"/>',
+  brave: '<path d="M8 1 13.5 3 13 10 8 15 3 10 2.5 3z" fill="#fb542b"/><path d="M8 5 10 7 8 11 6 7z" fill="#fff"/>',
+  opera: '<circle cx="8" cy="8" r="8" fill="#ff1b2d"/><ellipse cx="8" cy="8" rx="2.6" ry="4.6" fill="#fff"/>',
+  music: '<rect width="16" height="16" rx="4" fill="#3a4258"/><path d="M10.8 3.2v6.6a1.6 1.6 0 1 1-1-1.5V5.4L6.6 6.1v5a1.6 1.6 0 1 1-1-1.5V4.6z" fill="#e6e8ef"/>',
+}
+const MEDIA_SITES = { 'YouTube Music': 'ytmusic', YouTube: 'youtube', Netflix: 'netflix', Twitch: 'twitch', SoundCloud: 'soundcloud', bilibili: 'bilibili', Spotify: 'spotify', 'Apple Music': 'apple' }
+const MEDIA_APPS = [
+  [/spotify/i, 'Spotify', 'spotify'], [/chrome/i, 'Chrome', 'chrome'], [/msedge|edge/i, 'Edge', 'edge'],
+  [/firefox|308046B0AF4A39CB/i, 'Firefox', 'firefox'], [/brave/i, 'Brave', 'brave'], [/opera/i, 'Opera', 'opera'],
+  [/applemusic|itunes/i, 'Apple Music', 'apple'], [/zunemusic/i, '媒體播放器', 'music'],
+]
+/** Where the media plays: the site inside a browser when known, else the app. */
+function mediaSource(m) {
+  const [, appName, appIcon] = MEDIA_APPS.find(([re]) => re.test(m.app || '')) || [null, (m.app || '').split('!').pop().replace(/\.exe$/i, '') || '媒體', 'music']
+  if (m.site && m.site !== appName) return { name: `${m.site} · ${appName}`, icon: MEDIA_SITES[m.site] || appIcon }
+  return { name: appName, icon: appIcon }
 }
 function renderMedia(m) {
   $('media').hidden = !m
@@ -1132,8 +1156,14 @@ function renderMedia(m) {
   $('media-cover').hidden = !m.cover
   $('media-icon').hidden = !!m.cover
   $('media-title').textContent = m.title
-  $('media-artist').textContent = m.artist || mediaSource(m.app)
-  $('media').title = `${m.title}${m.artist ? ` — ${m.artist}` : ''}（${mediaSource(m.app)}）`
+  const src = mediaSource(m)
+  const icon = `<svg viewBox="0 0 16 16" aria-hidden="true">${MEDIA_ICONS[src.icon]}</svg>`
+  // Without a cover, the source's mark stands in for it.
+  $('media-icon').innerHTML = icon
+  $('media-artist').textContent = m.artist || ''
+  $('media-artist').hidden = !m.artist
+  $('media-source').innerHTML = `${icon}<span>${esc(src.name)}</span>`
+  $('media').title = `${m.title}${m.artist ? ` — ${m.artist}` : ''}（${src.name}）`
   $('media-toggle').textContent = playing ? '❚❚' : '▶'
   $('media-toggle').title = playing ? '暫停' : '播放'
   $('media-prev').disabled = !m.canPrev

@@ -99,8 +99,8 @@ function createMedia(onChange, { cacheDir }) {
     if (msg.cover) track.cover = msg.cover
     // Fixed key order: the helper's hashtables serialize in any order.
     emit({
-      app: msg.app, title: msg.title, artist: msg.artist, status: msg.status, canPrev: msg.canPrev, canNext: msg.canNext,
-      cover: track.cover,
+      app: msg.app, site: msg.site || null, title: msg.title, artist: msg.artist, status: msg.status,
+      canPrev: msg.canPrev, canNext: msg.canNext, cover: track.cover,
     })
   }
 
