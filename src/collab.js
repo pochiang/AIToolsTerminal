@@ -137,6 +137,7 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf, spa
         if (r.done) return
         r.done = true
         clearInterval(r.timer)
+        clearTimeout(r.enterTimer)
         resolve(result)
       }
       signal.abort = () => r.finish(fail('已取消。'))
@@ -166,7 +167,17 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf, spa
       `（請直接完成並回覆，不要反問對方${last ? '，也不要再呼叫 ask_session' : ''}。` +
       '如果這個請求與你目前的工作無關或不適合在這裡做，可以直接回覆拒絕並說明原因，建議對方另開新對話。）'
     t.pty.write(`\x1b[200~${text}\x1b[201~`)
-    setTimeout(() => t.pty?.write('\r'), 500)
+    // The Enter can get swallowed: a CLI still taking in a long paste may treat
+    // it as a newline. Press it again until the turn actually starts.
+    let presses = 0
+    const press = () => {
+      if (r.done || !t.pty || t.serving !== r.id) return
+      if (presses > 0 && (t.status === 'working' || t.doneSeq > r.seqAtSend)) return
+      if (presses++ >= 5) return
+      t.pty.write('\r')
+      r.enterTimer = setTimeout(press, 3000)
+    }
+    r.enterTimer = setTimeout(press, 500 + Math.min(1500, text.length))
     update(t)
     update(from)
   }
