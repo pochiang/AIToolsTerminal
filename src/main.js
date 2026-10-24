@@ -12,6 +12,7 @@ const gitOps = require('./git')
 const { readRepo, workingDiff, showCommit } = gitOps
 const { updateCli } = require('./updater')
 const selfUpdate = require('./self-update')
+const { createMedia } = require('./media')
 
 // Markers of a parent Claude Code session (when this app is started from one);
 // children that inherit them think they are nested and stop saving transcripts.
@@ -642,7 +643,7 @@ let claudeTimer = null
 async function refreshClaude() {
   clearTimeout(claudeTimer)
   const r = await usage.fetchClaude()
-  usageState.claude = r.limits ? { ...r, updatedAt: Date.now() } : { ...usageState.claude, error: r.error, loading: false }
+  usageState.claude = r.limits ? { ...r, updatedAt: Date.now() } : { ...usageState.claude, error: r.error, needsLogin: !!r.needsLogin, loading: false }
   send('usage:update', usageState)
   claudeTimer = setTimeout(refreshClaude, r.retryLater ? 300000 : 90000)
 }
@@ -650,7 +651,7 @@ let codexTimer = null
 async function refreshCodex() {
   clearTimeout(codexTimer)
   const r = await usage.fetchCodex()
-  usageState.codex = r.limits ? { ...r, updatedAt: Date.now() } : { ...usageState.codex, error: r.error, loading: false }
+  usageState.codex = r.limits ? { ...r, updatedAt: Date.now() } : { ...usageState.codex, error: r.error, needsLogin: !!r.needsLogin, loading: false }
   send('usage:update', usageState)
   codexTimer = setTimeout(refreshCodex, 120000)
 }
@@ -665,6 +666,7 @@ ipcMain.handle('app:init', () => {
     updates: updateState,
     sessions: [...sessions.values()].map(publicSession),
     version: app.getVersion(),
+    media: mediaState,
     appUpdate,
   }
 })
@@ -798,6 +800,10 @@ ipcMain.handle('dir:set', (_e, dir) => {
   if (fs.existsSync(dir)) rememberDir(dir)
   return config
 })
+let mediaState = null
+let media = null
+ipcMain.on('media:control', (_e, command) => media?.control(command))
+
 ipcMain.on('usage:refresh', () => {
   refreshClaude()
   refreshCodex()
@@ -864,6 +870,10 @@ app.whenReady().then(async () => {
   refreshClaude()
   refreshCodex()
   setInterval(pollCodex, 1000)
+  media = createMedia(state => {
+    mediaState = state
+    send('media:update', state)
+  }, { cacheDir: path.join(app.getPath('userData'), 'media') })
   if (autoUpdater || selfUpdate.supported(app.isPackaged)) {
     setTimeout(checkAppUpdate, 5000)
     setInterval(checkAppUpdate, 30 * 60000)

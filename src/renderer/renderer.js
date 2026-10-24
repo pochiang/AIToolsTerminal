@@ -68,7 +68,9 @@ function renderUsage() {
   if (!u) return
   const group = (kind, name, d) => {
     let inner
-    if (d.limits?.length) {
+    if (d.needsLogin) {
+      inner = `<div class="usage-error">尚未登入</div><button class="login-btn ${kind}" data-login="${kind}">登入</button>`
+    } else if (d.limits?.length) {
       inner = d.limits
         .map(l => {
           const pct = Math.round(l.percent)
@@ -1113,6 +1115,50 @@ $('app-update').addEventListener('click', async () => {
   if (r.error) toast(r.error)
 })
 
+// ---------- now playing ----------
+
+// Whatever Windows' media keys control right now (Spotify, a browser tab, ...).
+function mediaSource(app) {
+  const a = app || ''
+  const known = [[/spotify/i, 'Spotify'], [/chrome/i, 'Chrome'], [/msedge|edge/i, 'Edge'], [/firefox/i, 'Firefox'], [/zunemusic|music/i, '媒體播放器']]
+  return known.find(([re]) => re.test(a))?.[1] || a.split('!').pop().replace(/\.exe$/i, '')
+}
+function renderMedia(m) {
+  $('media').hidden = !m
+  if (!m) return
+  const playing = m.status === 'Playing'
+  // Assigning the same data URL again would make the image flicker.
+  if (m.cover && $('media-cover').src !== m.cover) $('media-cover').src = m.cover
+  $('media-cover').hidden = !m.cover
+  $('media-icon').hidden = !!m.cover
+  $('media-title').textContent = m.title
+  $('media-artist').textContent = m.artist || mediaSource(m.app)
+  $('media').title = `${m.title}${m.artist ? ` — ${m.artist}` : ''}（${mediaSource(m.app)}）`
+  $('media-toggle').textContent = playing ? '❚❚' : '▶'
+  $('media-toggle').title = playing ? '暫停' : '播放'
+  $('media-prev').disabled = !m.canPrev
+  $('media-next').disabled = !m.canNext
+}
+api.onMedia(renderMedia)
+$('media').addEventListener('click', e => {
+  const command = e.target.closest('[data-media]')?.dataset.media
+  if (command) api.mediaControl(command)
+})
+
+// Log in from a Terminal tab running the CLI's login command; once that
+// command finishes, refresh the quotas.
+const LOGIN_COMMAND = { claude: 'claude auth login', codex: 'codex login' }
+const loginTabs = new Set()
+$('usage').addEventListener('click', async e => {
+  const kind = e.target.closest('[data-login]')?.dataset.login
+  if (!kind) return
+  const id = await launch('shell')
+  if (!id) return
+  loginTabs.add(id)
+  api.rename(id, `${KIND[kind].name} 登入`)
+  api.input(id, `${LOGIN_COMMAND[kind]}\r`)
+})
+
 $('refresh-usage').addEventListener('click', e => {
   e.currentTarget.classList.remove('spin')
   void e.currentTarget.offsetWidth
@@ -1146,6 +1192,10 @@ api.onSessionUpdate(s => {
     return
   }
   // A turn that answered another session reports back there, not here.
+  if (loginTabs.has(s.id) && prev?.status === 'working' && s.status !== 'working') {
+    loginTabs.delete(s.id)
+    api.refreshUsage()
+  }
   if (prev && prev.status !== s.status && s.id !== state.active && s.status !== 'working' && !s.collab?.serving) state.attention.add(s.id)
   state.sessions.set(s.id, s)
   render()
@@ -1180,8 +1230,9 @@ ro.observe($('terms'))
 
 setInterval(renderUsage, 30000)
 
-api.init().then(async ({ config, usage, updates, sessions, version, appUpdate }) => {
+api.init().then(async ({ config, usage, updates, sessions, version, appUpdate, media }) => {
   state.config = config
+  renderMedia(media)
   state.version = version
   state.appUpdate = appUpdate
   renderAppUpdate()

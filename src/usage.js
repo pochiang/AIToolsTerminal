@@ -17,9 +17,9 @@ async function fetchClaude() {
   try {
     cred = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude', '.credentials.json'), 'utf8')).claudeAiOauth
   } catch {
-    return { error: '找不到 Claude 登入資訊（請先執行 claude 登入）' }
+    return { error: 'Claude 尚未登入', needsLogin: true }
   }
-  if (!cred?.accessToken) return { error: '找不到 Claude 存取權杖' }
+  if (!cred?.accessToken) return { error: 'Claude 尚未登入', needsLogin: true }
   let res
   try {
     res = await fetch('https://api.anthropic.com/api/oauth/usage', {
@@ -149,9 +149,23 @@ function tail(file, bytes) {
   }
 }
 
+/** `codex login status` exits non-zero when nobody is logged in. */
+async function codexLoggedIn() {
+  const exe = await codexPath()
+  if (!exe) return true
+  return new Promise(resolve => {
+    const p = spawn(exe, ['login', 'status'], { windowsHide: true, stdio: 'ignore' })
+    const timer = setTimeout(() => { try { p.kill() } catch {} resolve(true) }, 15000)
+    p.on('close', code => { clearTimeout(timer); resolve(code === 0) })
+    p.on('error', () => { clearTimeout(timer); resolve(true) })
+  })
+}
+
 async function fetchCodex() {
   const live = await fetchCodexAppServer()
   if (live.limits) return live
+  // Logged out, the old session logs would show stale limits; ask to log in instead.
+  if (!(await codexLoggedIn())) return { error: 'Codex 尚未登入', needsLogin: true }
   const logged = codexFromLogs()
   return logged.limits ? logged : live
 }

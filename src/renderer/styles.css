@@ -88,6 +88,33 @@ code { font-family: var(--mono); color: var(--text); }
 .usage-error { flex: 1; min-width: 0; color: var(--muted); font-size: 12px; white-space: normal; }
 .meter ~ .usage-error, .usage-stale { flex: none; cursor: help; }
 .usage-stale { color: var(--dim); font-size: 12px; }
+.media {
+  flex: none; width: 280px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px 6px 10px;
+  background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.media-icon { flex: none; color: var(--done); font-size: 16px; }
+.media-cover { flex: none; width: 32px; height: 32px; border-radius: 4px; object-fit: cover; }
+.media-text { flex: 1; min-width: 0; line-height: 1.25; }
+.media-title, .media-artist { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.media-title { font-size: 12.5px; font-weight: 600; }
+.media-artist { font-size: 11px; color: var(--muted); }
+.media-btn {
+  flex: none; width: 26px; height: 26px; padding: 0;
+  background: none; border: 1px solid transparent; border-radius: 50%;
+  color: var(--muted); font-size: 12px;
+}
+.media-btn:hover:not(:disabled) { color: var(--text); border-color: var(--line); }
+.media-btn:disabled { opacity: .35; cursor: default; }
+.media-btn.play { color: var(--text); background: var(--bg-2); border-color: var(--line); }
+.login-btn {
+  flex: none; padding: 4px 14px; border-radius: var(--radius);
+  font-size: 12px; font-weight: 600; border: 1px solid;
+}
+.login-btn.claude { background: rgba(224,122,95,.14); border-color: var(--claude); color: #f4a48d; }
+.login-btn.codex { background: rgba(169,155,255,.14); border-color: var(--codex); color: #c6bcff; }
+.login-btn:hover { filter: brightness(1.25); }
 .icon-btn {
   background: var(--bg-3);
   border: 1px solid var(--line);

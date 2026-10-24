@@ -2,7 +2,8 @@
 
 管理 Claude Code 與 Codex 的桌面終端機（Electron + xterm.js + ConPTY）。
 
-- **上方用量列**：Claude（5 小時／每週）與 Codex（5 小時／每週）額度、進度條、重置倒數；每 1.5～2 分鐘自動更新，⟳ 手動更新。
+- **上方用量列**：Claude（5 小時／每週）與 Codex（5 小時／每週）額度、進度條、重置倒數；每 1.5～2 分鐘自動更新，⟳ 手動更新。尚未登入時卡片改顯示「登入」按鈕，按下會開一個 Terminal 分頁執行 `claude auth login`／`codex login`，完成後自動重新讀取額度。
+- **正在播放**：右上角顯示 Windows 媒體控制目前的媒體（Spotify、瀏覽器等）的封面、歌名與歌手，可上一首／播放暫停／下一首；沒有媒體時隱藏。封面由 `src/media-cover.cs` 讀取，第一次啟動時以內建的 .NET Framework `csc.exe` 編譯到 `%APPDATA%\AI Tools Terminal\media`。
 - **啟動時自動更新**：每次開啟都在背景執行 `claude update` 與 `codex update`，版本顯示在額度卡片的方案下方（更新中／已更新／失敗）。更新期間按開新對話會等更新完成才啟動。
 - **一鍵開新對話**：選擇工作資料夾後按「＋ Claude Code」或「＋ Codex」，每個對話一個分頁。
 - **自動命名**：分頁名稱取自 Claude Code／Codex 根據對話內容產生的主題（終端機標題），並附上作業資料夾名稱；尚未產生前先顯示資料夾名稱。雙擊名稱、在分頁按右鍵或按卡片上的 ✎ 可改名，清空後恢復自動名稱。

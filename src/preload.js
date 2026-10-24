@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('aitt', {
   pickDir: () => ipcRenderer.invoke('dir:pick'),
   setDir: dir => ipcRenderer.invoke('dir:set', dir),
   refreshUsage: () => ipcRenderer.send('usage:refresh'),
+  mediaControl: command => ipcRenderer.send('media:control', command),
+  onMedia: on('media:update'),
   readGit: cwd => ipcRenderer.invoke('git:read', cwd),
   gitWorkingDiff: (cwd, rel) => ipcRenderer.invoke('git:working-diff', cwd, rel),
   gitShow: (cwd, hash) => ipcRenderer.invoke('git:show', cwd, hash),
