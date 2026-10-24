@@ -93,7 +93,13 @@ code { font-family: var(--mono); color: var(--text); }
   flex: none; width: 300px; align-self: stretch;
   display: flex; align-items: center; gap: 10px;
   padding: 6px 8px 6px 6px;
-  background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--radius);
+  /* Framed in the source's brand color (set from JS), like the usage cards. */
+  --media-accent: var(--muted);
+  background: color-mix(in srgb, var(--media-accent) 9%, var(--bg-3));
+  border: 1px solid color-mix(in srgb, var(--media-accent) 30%, transparent);
+  border-left: 3px solid var(--media-accent);
+  border-radius: var(--radius);
+  transition: background .3s, border-color .3s;
 }
 .media-icon { flex: none; width: 42px; display: flex; justify-content: center; }
 /* Fixed size: a percentage height would fall back to the image's own size. */

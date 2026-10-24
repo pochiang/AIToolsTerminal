@@ -1135,6 +1135,12 @@ const MEDIA_ICONS = {
   opera: '<circle cx="8" cy="8" r="8" fill="#ff1b2d"/><ellipse cx="8" cy="8" rx="2.6" ry="4.6" fill="#fff"/>',
   music: '<rect width="16" height="16" rx="4" fill="#3a4258"/><path d="M10.8 3.2v6.6a1.6 1.6 0 1 1-1-1.5V5.4L6.6 6.1v5a1.6 1.6 0 1 1-1-1.5V4.6z" fill="#e6e8ef"/>',
 }
+// Each mark's brand color, for the widget's frame.
+const MEDIA_COLORS = {
+  spotify: '#1db954', youtube: '#ff0033', ytmusic: '#ff0033', netflix: '#e50914', twitch: '#9146ff',
+  soundcloud: '#ff5500', bilibili: '#00a1d6', apple: '#fa2d48', chrome: '#4285f4', edge: '#0c84d8',
+  firefox: '#ff7139', brave: '#fb542b', opera: '#ff1b2d', music: '#8a90a2',
+}
 const MEDIA_SITES = { 'YouTube Music': 'ytmusic', YouTube: 'youtube', Netflix: 'netflix', Twitch: 'twitch', SoundCloud: 'soundcloud', bilibili: 'bilibili', Spotify: 'spotify', 'Apple Music': 'apple' }
 const MEDIA_APPS = [
   [/spotify/i, 'Spotify', 'spotify'], [/chrome/i, 'Chrome', 'chrome'], [/msedge|edge/i, 'Edge', 'edge'],
@@ -1163,6 +1169,7 @@ function renderMedia(m) {
   $('media-artist').textContent = m.artist || ''
   $('media-artist').hidden = !m.artist
   $('media-source').innerHTML = `${icon}<span>${esc(src.name)}</span>`
+  $('media').style.setProperty('--media-accent', MEDIA_COLORS[src.icon])
   $('media').title = `${m.title}${m.artist ? ` — ${m.artist}` : ''}（${src.name}）`
   $('media-toggle').textContent = playing ? '❚❚' : '▶'
   $('media-toggle').title = playing ? '暫停' : '播放'
