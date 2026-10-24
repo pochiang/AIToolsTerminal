@@ -96,7 +96,8 @@ code { font-family: var(--mono); color: var(--text); }
   background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--radius);
 }
 .media-icon { flex: none; width: 42px; display: flex; justify-content: center; }
-.media-cover { flex: none; height: 100%; aspect-ratio: 1; border-radius: 5px; object-fit: cover; }
+/* Fixed size: a percentage height would fall back to the image's own size. */
+.media-cover { flex: none; width: 44px; height: 44px; border-radius: 5px; object-fit: cover; }
 .media-icon svg { width: 26px; height: 26px; }
 .media-text { flex: 1; min-width: 0; line-height: 1.25; }
 .media-title, .media-artist { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
