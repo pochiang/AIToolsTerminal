@@ -165,7 +165,29 @@ function makeTerm(holder) {
   term.loadAddon(new WebLinksAddon.WebLinksAddon((_e, uri) => api.openLink(uri)))
   term.open(holder)
   try { fit.fit() } catch {}
-  return { term, fit }
+  return { term, fit, gl: null }
+}
+
+// The visible terminal draws with WebGL: the DOM renderer is the main CPU cost
+// while a session streams output. Hidden ones (visibility:hidden) would keep
+// drawing and each hold a GPU context, so they go back to the DOM renderer.
+// A lost context falls back to DOM too, and is retried on the next select.
+function useGpu(t, on) {
+  if (on === !!t.gl) return
+  if (!on) {
+    t.gl.dispose()
+    t.gl = null
+    return
+  }
+  try {
+    const gl = new WebglAddon.WebglAddon()
+    gl.onContextLoss(() => {
+      gl.dispose()
+      if (t.gl === gl) t.gl = null
+    })
+    t.term.loadAddon(gl)
+    t.gl = gl
+  } catch {}
 }
 
 // Clicking or typing in a finished session counts as having seen it.
@@ -304,7 +326,10 @@ function select(id) {
   state.active = id
   api.setActive(id)
   state.attention.delete(id)
-  for (const [sid, t] of state.terms) t.el.classList.toggle('active', sid === id)
+  for (const [sid, t] of state.terms) {
+    t.el.classList.toggle('active', sid === id)
+    useGpu(t, sid === id)
+  }
   $('empty').hidden = !!id
   const kind = id && state.sessions.get(id)?.kind
   if (kind) $('terms').dataset.kind = kind
@@ -395,10 +420,33 @@ function renderStatus() {
   const order = s => STATUS[s.status]?.order ?? 2
   const list = [...state.sessions.values()].sort((a, b) => order(a) - order(b) || b.since - a.since)
 
-  $('status-groups').innerHTML = list.length
-    ? list.map(card).join('')
-    : '<div class="group-empty">還沒有對話，從左邊開啟 Claude Code 或 Codex</div>'
+  const box = $('status-groups')
+  if (!list.length) {
+    cards.clear()
+    box.innerHTML = '<div class="group-empty">還沒有對話，從左邊開啟 Claude Code 或 Codex</div>'
+    return
+  }
+  // Rebuild only the cards whose markup changed; untouched ones keep their DOM
+  // (and their running animations).
+  const els = list.map(s => {
+    const html = card(s)
+    const key = html.replace(/animation-delay:-[\d.]+s/g, '')
+    let c = cards.get(s.id)
+    if (!c || c.key !== key) {
+      const tpl = document.createElement('template')
+      tpl.innerHTML = html.trim()
+      const el = tpl.content.firstElementChild
+      if (c?.el.isConnected) c.el.replaceWith(el)
+      c = { key, el }
+      cards.set(s.id, c)
+    }
+    return c.el
+  })
+  for (const id of cards.keys()) if (!state.sessions.has(id)) cards.delete(id)
+  const kids = box.children
+  if (kids.length !== els.length || els.some((el, i) => kids[i] !== el)) box.replaceChildren(...els)
 }
+const cards = new Map() // session id -> { key: markup without wave phases, el }
 
 const kTokens = n => (n >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n))
 
@@ -482,7 +530,10 @@ function startRename(id, el) {
   const s = state.sessions.get(id)
   if (!s || !el || state.editing) return
   state.editing = id
+  // The input replaces part of a tab or card; make the next render rebuild it.
   lastTabsHtml = ''
+  const cached = cards.get(id)
+  if (cached) cached.key = ''
   const input = document.createElement('input')
   input.className = 'rename'
   input.value = s.title
@@ -628,6 +679,8 @@ function setGitHidden(hidden) {
   gitState.hidden = hidden
   try { localStorage.setItem('gitHidden', hidden ? '1' : '0') } catch {}
   renderGit()
+  // Collapsed, it polls slowly; catch up when it opens.
+  if (!hidden) refreshGit()
 }
 
 /**
@@ -1087,7 +1140,16 @@ $('side-split').addEventListener('mousedown', e => {
   document.addEventListener('mousemove', move)
   document.addEventListener('mouseup', up)
 })
-setInterval(refreshGit, 4000)
+// Every 4 s while the window is in front and the panel open; every ~15 s when
+// behind other windows or collapsed to its bar; not at all when minimized.
+let lastGitPoll = 0
+setInterval(() => {
+  const slow = !document.hasFocus() || gitState.hidden
+  if (document.hidden || (slow && Date.now() - lastGitPoll < 15000)) return
+  lastGitPoll = Date.now()
+  refreshGit()
+}, 4000)
+window.addEventListener('focus', () => refreshGit())
 
 // ---------- events ----------
 
@@ -1235,8 +1297,18 @@ api.onSessionUpdate(s => {
   }
   if (prev && prev.status !== s.status && s.id !== state.active && s.status !== 'working' && !s.collab?.serving) state.attention.add(s.id)
   state.sessions.set(s.id, s)
-  render()
+  scheduleRender()
 })
+// Updates come in bursts while sessions work; draw at most once per frame.
+let renderQueued = false
+function scheduleRender() {
+  if (renderQueued) return
+  renderQueued = true
+  requestAnimationFrame(() => {
+    renderQueued = false
+    render()
+  })
+}
 api.onSessionRemoved(removeSession)
 api.onSessionSelect(select)
 api.onSessionSpawn(async (req, kind, restore) => {

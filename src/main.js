@@ -113,7 +113,7 @@ function resolveExe(name) {
 }
 
 function publicSession(s) {
-  const { pty: _p, codex: _c, outBuf: _o, oscTail: _t, shellTail: _st, ...rest } = s
+  const { pty: _p, codex: _c, outBuf: _o, oscTail: _t, shellTail: _st, outQueue: _q, ...rest } = s
   return { ...rest, title: titleOf(s), collab: collab.describe(s) }
 }
 
@@ -372,7 +372,7 @@ function createSession(kind, cwd, cols, rows, restore = {}) {
     s.lastOutputAt = Date.now()
     // Keep the mouse for selecting text: drop requests to capture it.
     data = data.replace(MOUSE_MODE_RE, '')
-    send('pty:data', id, data)
+    queueOutput(s, data)
     // A shell's title is just its path; keep the folder name.
     if (kind !== 'shell') watchTitle(s, data)
     if (kind === 'codex') watchCodexApproval(s, data)
@@ -386,6 +386,20 @@ function createSession(kind, cwd, cols, rows, restore = {}) {
   rememberDir(cwd)
   saveTabs()
   return publicSession(s)
+}
+
+// A busy CLI writes many small chunks (a spinner redraws ~10 times a second);
+// send each session's output at most once per 8 ms instead of per chunk.
+function queueOutput(s, data) {
+  if (!s.outQueue) {
+    setTimeout(() => {
+      const out = s.outQueue
+      s.outQueue = ''
+      // The tab may have closed meanwhile; its terminal is gone.
+      if (sessions.get(s.id) === s) send('pty:data', s.id, out)
+    }, 8)
+  }
+  s.outQueue = (s.outQueue || '') + data
 }
 
 // Terminal tabs run shell-integration.ps1 (as -EncodedCommand, which also works

@@ -398,8 +398,16 @@ code { font-family: var(--mono); color: var(--text); }
 .card.codex.selected { background: var(--codex-tint-strong); }
 .card.shell.selected { background: var(--shell-tint-strong); }
 /* A finished card glows green until clicked; the AI edge color stays. */
-.card.done, .card.done.selected { background: rgba(63, 185, 80, .14); animation: done-glow 1.8s ease-in-out infinite; }
-@keyframes done-glow { 50% { background: rgba(63, 185, 80, .26); } }
+.card.done, .card.done.selected { background: rgba(63, 185, 80, .14); }
+/* The glow fades an overlay's opacity (compositor only) instead of animating
+   the background, which would repaint the card every frame. */
+.card { position: relative; isolation: isolate; }
+.card.done::before {
+  content: ''; position: absolute; inset: 0; z-index: -1;
+  border-radius: inherit; background: rgba(63, 185, 80, .14); pointer-events: none;
+  animation: done-glow 1.8s ease-in-out infinite;
+}
+@keyframes done-glow { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
 .card-head { display: flex; align-items: center; gap: 6px; }
 .card-head .kind.claude { color: var(--claude); }
 .card-head .kind.codex { color: var(--codex); }
@@ -459,6 +467,8 @@ code { font-family: var(--mono); color: var(--text); }
 .tank-wave svg { display: block; width: 100%; height: 100%; fill: color-mix(in srgb, var(--water) 55%, transparent); }
 .tank-wave.back { height: 8px; opacity: .55; animation-duration: 3.2s; animation-direction: reverse; }
 @keyframes tank-wave { to { transform: translateX(-50%); } }
+/* Water only ripples while the session works; idle cards stay still. */
+.card:not(.working) .tank-wave { animation-play-state: paused; }
 .tank-pct {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
