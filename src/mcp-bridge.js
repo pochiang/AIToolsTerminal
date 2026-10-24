@@ -42,7 +42,40 @@ const TOOLS = [
       additionalProperties: false,
     },
   },
+  {
+    name: 'add_todo',
+    description:
+      '記下一項你建議、但使用者這回合沒有要處理的後續事項（例如「之後可以再改 X」），存在這個資料夾的待辦清單，使用者會在 AI Tools Terminal 側邊欄看到。' +
+      '一項一件事、標題簡短；使用者要你現在就做的不用記。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: '簡短標題，一行內，例如「設定頁加入匯出功能」' },
+        detail: { type: 'string', description: '選填：之後接手需要的背景，例如相關檔案或原因' },
+      },
+      required: ['title'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'list_todos',
+    description: '列出這個資料夾還沒完成的待辦（已完成或被使用者移除的不會列出）。使用者問還有什麼要做、或你要接續之前的工作時使用。',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'complete_todo',
+    description: '你做完某項待辦後呼叫，把它從清單移到已完成。',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'list_todos 或 add_todo 回傳的 id，例如 "t3"' } },
+      required: ['id'],
+      additionalProperties: false,
+    },
+  },
 ]
+
+const INSTRUCTIONS =
+  '當你建議了數項後續事項而使用者沒有要現在處理時，用 add_todo 逐項記下；做完待辦中的項目時用 complete_todo 標記完成。'
 
 const inflight = new Map() // JSON-RPC id -> http request
 
@@ -93,6 +126,7 @@ async function handle(msg) {
           protocolVersion: params?.protocolVersion || '2025-06-18',
           capabilities: { tools: {} },
           serverInfo: { name: 'aitt', version: '0.1.0' },
+          instructions: INSTRUCTIONS,
         },
       })
     case 'ping':

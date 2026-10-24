@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, clipboard, Notification, Menu, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, clipboard, Notification, Menu, shell, screen } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
@@ -8,6 +8,7 @@ const { execFileSync } = require('child_process')
 const pty = require('@lydell/node-pty')
 const usage = require('./usage')
 const { createCollab } = require('./collab')
+const { createTodos, TODO_TOOLS } = require('./todos')
 const gitOps = require('./git')
 const { readRepo, workingDiff, showCommit } = gitOps
 const { updateCli } = require('./updater')
@@ -78,6 +79,20 @@ const collab = createCollab({
   spawn: spawnSession,
   cancelSpawns,
 })
+
+const todos = createTodos({ file: path.join(app.getPath('userData'), 'todos.json'), sessions, send })
+// The todo column sits left of the terminals; opening or collapsing it grows or
+// shrinks the window on its left edge so the terminals keep their width.
+const TODO_WIDTH = { open: 240, closed: 34 }
+const todoWidth = () => TODO_WIDTH[config.todoHidden ? 'closed' : 'open']
+function growWindow(delta) {
+  if (!win || win.isDestroyed() || !delta || win.isMaximized() || win.isFullScreen()) return
+  const b = win.getBounds()
+  const wa = screen.getDisplayMatching(b).workArea
+  const x = Math.max(wa.x, b.x - delta)
+  const width = Math.min(b.width + delta, wa.x + wa.width - x)
+  win.setBounds({ x, y: b.y, width, height: b.height })
+}
 
 // The renderer owns terminal creation, so ask it to open a background tab.
 // A request settles as soon as the session exists (see session:create); once
@@ -215,7 +230,7 @@ function claudeHookSettings(id) {
     statusLine: { type: 'command', command: cmd('StatusLine')[0].command, padding: 0 },
     // The tool's top bar already shows quotas; drop the in-terminal usage band.
     enabledPlugins: { 'usage-bars@gkkc6-mods': false },
-    permissions: { allow: ['mcp__aitt__list_sessions', 'mcp__aitt__ask_session', 'mcp__aitt__open_session'] },
+    permissions: { allow: ['mcp__aitt__list_sessions', 'mcp__aitt__ask_session', 'mcp__aitt__open_session', ...TODO_TOOLS.map(t => `mcp__aitt__${t}`)] },
     hooks: {
       UserPromptSubmit: [{ hooks: cmd('UserPromptSubmit') }],
       PostToolUse: [{ matcher: '*', hooks: cmd('PostToolUse') }],
@@ -527,7 +542,9 @@ function startHookServer() {
         // An MCP tool call; ask_session holds the response open until the reply.
         const signal = {}
         res.on('close', () => { if (!res.writableEnded) signal.abort?.() })
-        const result = await collab.call(msg.session, msg.tool, msg.args || {}, signal)
+        const result = todos.has(msg.tool)
+          ? todos.call(msg.session, msg.tool, msg.args || {})
+          : await collab.call(msg.session, msg.tool, msg.args || {}, signal)
         if (!res.destroyed) res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(result))
       })
     })
@@ -682,6 +699,8 @@ ipcMain.handle('app:init', () => {
     version: app.getVersion(),
     media: mediaState,
     appUpdate,
+    todos: todos.open(),
+    todoWidth: TODO_WIDTH,
   }
 })
 // ---------- app self-update ----------
@@ -844,12 +863,19 @@ ipcMain.handle('menu:terminal', (_e, hasSelection) => new Promise(resolve => {
   ]).popup({ window: win, callback: () => setImmediate(() => resolve(picked)) })
 }))
 ipcMain.on('clipboard:write', (_e, text) => clipboard.writeText(text))
+ipcMain.on('todos:dismiss', (_e, id) => todos.dismiss(String(id)))
+ipcMain.on('todos:panel', (_e, hidden) => {
+  const before = todoWidth()
+  config.todoHidden = !!hidden
+  saveConfig()
+  growWindow(todoWidth() - before)
+})
 
 // ---------- app ----------
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1480,
+    width: Math.min(1480 + todoWidth(), screen.getPrimaryDisplay().workArea.width),
     height: 900,
     minWidth: 960,
     minHeight: 560,

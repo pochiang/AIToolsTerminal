@@ -335,6 +335,7 @@ function select(id) {
   if (kind) $('terms').dataset.kind = kind
   else delete $('terms').dataset.kind
   if (gitCwd() !== gitState.cwd) refreshGit()
+  renderTodos()
   closeViewer()
   const t = id && state.terms.get(id)
   if (t) {
@@ -506,6 +507,48 @@ $('status-groups').addEventListener('click', e => {
   if (!c) return
   ack(c.dataset.id)
   select(c.dataset.id)
+})
+
+// ---------- todos ----------
+
+// Open follow-ups the AI recorded for the active session's folder; ✕ moves one
+// to done, and done items are never shown again.
+const dirKey = d => String(d || '').replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase()
+
+function renderTodos() {
+  const cwd = gitCwd()
+  const hidden = !!state.config.todoHidden
+  const panel = $('todo-panel')
+  const list = cwd ? (state.todos || []).filter(t => dirKey(t.cwd) === dirKey(cwd)) : []
+  panel.classList.toggle('collapsed', hidden)
+  if (state.todoWidth) panel.style.width = `${state.todoWidth[hidden ? 'closed' : 'open']}px`
+  $('todo-count').textContent = list.length ? String(list.length) : ''
+  $('todo-close').textContent = hidden ? '▸' : '◂'
+  $('todo-close').title = hidden ? '展開待辦' : '收起'
+  $('todo-list').innerHTML = !cwd
+    ? '<div class="group-empty">選一個對話來看它資料夾的待辦</div>'
+    : list.length
+    ? list
+        .map(t => `<div class="todo" title="${esc(t.detail || t.title)}">
+          <span class="todo-title">${esc(t.title)}</span>
+          <button class="todo-x" data-dismiss="${esc(t.id)}" title="移到已完成">✕</button>
+        </div>`)
+        .join('')
+    : '<div class="group-empty">這個資料夾沒有待辦</div>'
+}
+$('todo-list').addEventListener('click', e => {
+  const x = e.target.closest('[data-dismiss]')
+  if (x) api.dismissTodo(x.dataset.dismiss)
+})
+function setTodoHidden(hidden) {
+  state.config.todoHidden = hidden
+  api.setTodoPanel(hidden)
+  renderTodos()
+}
+$('todo-close').addEventListener('click', () => setTodoHidden(!state.config.todoHidden))
+// The collapsed strip expands on a click anywhere on it.
+$('todo-panel').addEventListener('click', e => {
+  if (state.config.todoHidden && !e.target.closest('button')) setTodoHidden(false)
 })
 
 // ---------- rename ----------
@@ -1315,6 +1358,10 @@ api.onSessionSpawn(async (req, kind, restore) => {
   const id = await launch(kind, restore, { background: true })
   api.spawned(req, id ? { id } : { error: '開啟失敗' })
 })
+api.onTodos(list => {
+  state.todos = list
+  renderTodos()
+})
 api.onCollabEvent(e =>toast(`⇄ 已阻擋「${e.title}」的協作請求：${e.text}`, 'info'))
 api.onUsage(u => {
   state.usage = u
@@ -1339,8 +1386,11 @@ ro.observe($('terms'))
 
 setInterval(renderUsage, 30000)
 
-api.init().then(async ({ config, usage, updates, sessions, version, appUpdate, media }) => {
+api.init().then(async ({ config, usage, updates, sessions, version, appUpdate, media, todos, todoWidth }) => {
   state.config = config
+  state.todos = todos || []
+  state.todoWidth = todoWidth
+  renderTodos()
   renderMedia(media)
   state.version = version
   state.appUpdate = appUpdate

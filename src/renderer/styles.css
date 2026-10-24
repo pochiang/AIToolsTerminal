@@ -405,7 +405,9 @@ code { font-family: var(--mono); color: var(--text); }
 .card.done::before {
   content: ''; position: absolute; inset: 0; z-index: -1;
   border-radius: inherit; background: rgba(63, 185, 80, .14); pointer-events: none;
-  animation: done-glow 1.8s ease-in-out infinite;
+  /* A few pulses, then a steady tint: an endless animation keeps the window
+     compositing 60 frames a second for as long as the card goes unread. */
+  animation: done-glow 1.8s ease-in-out 3;
 }
 @keyframes done-glow { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
 .card-head { display: flex; align-items: center; gap: 6px; }
@@ -475,6 +477,37 @@ code { font-family: var(--mono); color: var(--text); }
   font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
   color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .8);
 }
+
+/* ---------- todo panel ---------- */
+/* Left column; its width comes from the main process, which grows the window by it. */
+.todo-panel {
+  width: 240px; flex: none;
+  border-right: 1px solid var(--line);
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  min-height: 0;
+}
+.todo-panel .panel-head { gap: 8px; justify-content: flex-start; padding-left: 14px; }
+.todo-count { flex: 1; color: var(--muted); font-size: 12px; }
+/* Collapsed: a thin strip with the expand button and the count. */
+.todo-panel.collapsed { cursor: pointer; }
+.todo-panel.collapsed:hover { background: var(--bg-2); }
+.todo-panel.collapsed .todo-list, .todo-panel.collapsed h3 { display: none; }
+.todo-panel.collapsed .panel-head { flex-direction: column; gap: 4px; padding: 10px 0; border-bottom: 0; }
+.todo-panel.collapsed .todo-count { flex: none; text-align: center; }
+.todo-list { flex: 1; overflow-y: auto; padding: 4px 6px 8px; }
+.todo {
+  display: flex; align-items: center; gap: 8px;
+  padding: 3px 4px 3px 10px; border-radius: 4px;
+  font-size: 12.5px;
+}
+.todo:hover { background: var(--bg-2); }
+.todo-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.todo-x {
+  flex: none; background: none; border: 0; border-radius: 4px;
+  color: var(--dim); padding: 0 6px; font-size: 12px; line-height: 20px;
+}
+.todo-x:hover { color: var(--danger); background: var(--bg-3); }
 
 /* ---------- git panel ---------- */
 .git-panel {

@@ -40,4 +40,7 @@ contextBridge.exposeInMainWorld('aitt', {
   onSessionSelect: on('session:select'),
   onUsage: on('usage:update'),
   onUpdateState: on('update:state'),
+  dismissTodo: id => ipcRenderer.send('todos:dismiss', id),
+  setTodoPanel: hidden => ipcRenderer.send('todos:panel', hidden),
+  onTodos: on('todos:update'),
 })
