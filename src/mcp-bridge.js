@@ -1,11 +1,13 @@
 // Stdio MCP server that Claude Code / Codex sessions launched by AI Tools
 // Terminal load. It forwards tool calls to the app, which relays messages
-// between sessions and enforces the collaboration limits.
+// between sessions and enforces the collaboration limits, or keeps the to-do
+// list. Each session loads it twice, once per tool group (AITT_TOOLS), so the
+// model sees collaboration and to-dos as separate servers.
 const http = require('http')
 
-const { AITT_PORT, AITT_SESSION, AITT_TOKEN } = process.env
+const { AITT_PORT, AITT_SESSION, AITT_TOKEN, AITT_TOOLS } = process.env
 
-const TOOLS = [
+const COLLAB_TOOLS = [
   {
     name: 'list_sessions',
     description:
@@ -42,6 +44,9 @@ const TOOLS = [
       additionalProperties: false,
     },
   },
+]
+
+const TODO_TOOLS = [
   {
     name: 'add_todo',
     description:
@@ -74,8 +79,23 @@ const TOOLS = [
   },
 ]
 
-const INSTRUCTIONS =
-  '當你建議了數項後續事項而使用者沒有要現在處理時，用 add_todo 逐項記下；做完待辦中的項目時用 complete_todo 標記完成。'
+const GROUPS = {
+  collab: {
+    name: 'aitt',
+    tools: COLLAB_TOOLS,
+    instructions:
+      '需要另一個 AI 審查、提供第二意見或分工時，先用 list_sessions 找相關的對話再用 ask_session 詢問；沒有相關對話時才用 open_session 開新的。',
+    feature: '協作功能',
+  },
+  todo: {
+    name: 'aitt-todo',
+    tools: TODO_TOOLS,
+    instructions:
+      '當你建議了數項後續事項而使用者沒有要現在處理時，用 add_todo 逐項記下；做完待辦中的項目時用 complete_todo 標記完成。',
+    feature: '待辦清單',
+  },
+}
+const GROUP = GROUPS[AITT_TOOLS] || GROUPS.collab
 
 const inflight = new Map() // JSON-RPC id -> http request
 
@@ -85,7 +105,7 @@ function write(msg) {
 
 function callApp(tool, args, rpcId) {
   return new Promise(resolve => {
-    if (!AITT_PORT || !AITT_SESSION) return resolve({ text: '這個對話不是由 AI Tools Terminal 開啟，無法使用協作功能。', isError: true })
+    if (!AITT_PORT || !AITT_SESSION) return resolve({ text: `這個對話不是由 AI Tools Terminal 開啟，無法使用${GROUP.feature}。`, isError: true })
     const body = JSON.stringify({ session: AITT_SESSION, tool, args })
     const req = http.request(
       {
@@ -125,14 +145,14 @@ async function handle(msg) {
         result: {
           protocolVersion: params?.protocolVersion || '2025-06-18',
           capabilities: { tools: {} },
-          serverInfo: { name: 'aitt', version: '0.1.0' },
-          instructions: INSTRUCTIONS,
+          serverInfo: { name: GROUP.name, version: '0.1.0' },
+          instructions: GROUP.instructions,
         },
       })
     case 'ping':
       return write({ jsonrpc: '2.0', id, result: {} })
     case 'tools/list':
-      return write({ jsonrpc: '2.0', id, result: { tools: TOOLS } })
+      return write({ jsonrpc: '2.0', id, result: { tools: GROUP.tools } })
     case 'tools/call': {
       const r = await callApp(params?.name, params?.arguments || {}, id)
       return write({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: r.text }], isError: !!r.isError } })

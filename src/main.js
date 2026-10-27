@@ -231,7 +231,7 @@ function claudeHookSettings(id) {
     statusLine: { type: 'command', command: cmd('StatusLine')[0].command, padding: 0 },
     // The tool's top bar already shows quotas; drop the in-terminal usage band.
     enabledPlugins: { 'usage-bars@gkkc6-mods': false },
-    permissions: { allow: ['mcp__aitt__list_sessions', 'mcp__aitt__ask_session', 'mcp__aitt__open_session', ...TODO_TOOLS.map(t => `mcp__aitt__${t}`)] },
+    permissions: { allow: ['mcp__aitt__list_sessions', 'mcp__aitt__ask_session', 'mcp__aitt__open_session', ...TODO_TOOLS.map(t => `mcp__aitt-todo__${t}`)] },
     hooks: {
       UserPromptSubmit: [{ hooks: cmd('UserPromptSubmit') }],
       PostToolUse: [{ matcher: '*', hooks: cmd('PostToolUse') }],
@@ -311,31 +311,35 @@ function createSession(kind, cwd, cols, rows, restore = {}) {
   const id = `s${++seq}`
   const mcpEnv = { AITT_PORT: String(hookPort), AITT_SESSION: id, AITT_TOKEN: TOKEN }
   const bridgeEnv = { ...mcpEnv, ELECTRON_RUN_AS_NODE: '1' }
+  // Collaboration and to-dos are separate servers, both run by the same bridge.
+  const servers = { aitt: { ...bridgeEnv, AITT_TOOLS: 'collab' }, 'aitt-todo': { ...bridgeEnv, AITT_TOOLS: 'todo' } }
   // Room for the longest collaboration wait, plus slack.
   const toolTimeoutSec = config.collab.timeoutMin * 60 + 120
   let args
   if (kind === 'claude') {
     const mcpFile = path.join(app.getPath('userData'), 'mcp', `${id}.json`)
+    const mcpServers = Object.fromEntries(Object.entries(servers).map(([name, env]) => [name, { type: 'stdio', command: NODE_RUNTIME, args: [MCP_BRIDGE], env }]))
     fs.mkdirSync(path.dirname(mcpFile), { recursive: true })
-    fs.writeFileSync(mcpFile, JSON.stringify({ mcpServers: { aitt: { type: 'stdio', command: NODE_RUNTIME, args: [MCP_BRIDGE], env: bridgeEnv } } }, null, 2))
+    fs.writeFileSync(mcpFile, JSON.stringify({ mcpServers }, null, 2))
     args = ['--settings', claudeHookSettings(id), '--mcp-config', mcpFile]
     // Claude reports a session id before anything is written; a conversation that never got a
     // message has no transcript, and resuming it fails with "No conversation found".
     if (restore.convId && !claudeTranscriptExists(restore.convId)) restore = { ...restore, convId: null }
     if (restore.convId) args.push('--resume', restore.convId)
   } else if (kind === 'codex') {
-    const env = Object.entries(bridgeEnv).map(([k, v]) => `${k}="${v}"`).join(',')
-    args = [
-      '-c', `mcp_servers.aitt.command="${NODE_RUNTIME}"`,
-      '-c', `mcp_servers.aitt.args=["${MCP_BRIDGE}"]`,
-      '-c', `mcp_servers.aitt.env={${env}}`,
-      '-c', `mcp_servers.aitt.tool_timeout_sec=${toolTimeoutSec}`,
+    args = Object.entries(servers).flatMap(([name, env]) => [
+      '-c', `mcp_servers.${name}.command="${NODE_RUNTIME}"`,
+      '-c', `mcp_servers.${name}.args=["${MCP_BRIDGE}"]`,
+      '-c', `mcp_servers.${name}.env={${Object.entries(env).map(([k, v]) => `${k}="${v}"`).join(',')}}`,
+      '-c', `mcp_servers.${name}.tool_timeout_sec=${toolTimeoutSec}`,
       // The relay enforces its own limits; don't stop for approval on every call.
-      '-c', 'mcp_servers.aitt.default_tools_approval_mode="approve"',
+      '-c', `mcp_servers.${name}.default_tools_approval_mode="approve"`,
+    ])
+    args.push(
       // Stay in the normal buffer so the wheel scrolls history instead of
       // being turned into arrow keys that page through Codex's input history.
       '--no-alt-screen',
-    ]
+    )
     if (restore.convId) args.unshift('resume', restore.convId)
   } else {
     args = ['-NoLogo', '-NoExit', '-EncodedCommand', SHELL_INTEGRATION]
