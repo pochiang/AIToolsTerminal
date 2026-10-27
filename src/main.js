@@ -30,6 +30,7 @@ const MCP_BRIDGE = path.join(__dirname, 'mcp-bridge.js').replace(/app\.asar([\\/
 // The bridge runs on this app's own runtime, so no separate Node.js is needed.
 const NODE_RUNTIME = process.execPath.replace(/\\/g, '/')
 const CODEX_SESSIONS = path.join(os.homedir(), '.codex', 'sessions')
+const CLAUDE_PROJECTS = path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), 'projects')
 
 let win = null
 let hookPort = 0
@@ -318,6 +319,9 @@ function createSession(kind, cwd, cols, rows, restore = {}) {
     fs.mkdirSync(path.dirname(mcpFile), { recursive: true })
     fs.writeFileSync(mcpFile, JSON.stringify({ mcpServers: { aitt: { type: 'stdio', command: NODE_RUNTIME, args: [MCP_BRIDGE], env: bridgeEnv } } }, null, 2))
     args = ['--settings', claudeHookSettings(id), '--mcp-config', mcpFile]
+    // Claude reports a session id before anything is written; a conversation that never got a
+    // message has no transcript, and resuming it fails with "No conversation found".
+    if (restore.convId && !claudeTranscriptExists(restore.convId)) restore = { ...restore, convId: null }
     if (restore.convId) args.push('--resume', restore.convId)
   } else if (kind === 'codex') {
     const env = Object.entries(bridgeEnv).map(([k, v]) => `${k}="${v}"`).join(',')
@@ -593,6 +597,12 @@ function findRollout(s) {
     } catch {}
   }
   return null
+}
+
+function claudeTranscriptExists(convId) {
+  let dirs
+  try { dirs = fs.readdirSync(CLAUDE_PROJECTS) } catch { return true }
+  return dirs.some(d => fs.existsSync(path.join(CLAUDE_PROJECTS, d, `${convId}.jsonl`)))
 }
 
 function findRolloutById(convId) {
