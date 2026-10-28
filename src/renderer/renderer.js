@@ -289,6 +289,8 @@ function watchTrustPrompt(id, term) {
   })
 }
 
+const DORMANT_TEXT = '這個對話還沒載入（重開時只先恢復目前的分頁），切到這裡就會開始恢復…'
+
 // restore: a saved tab ({ cwd, convId, titles }) to reopen instead of a fresh session.
 // background: open without switching to it (a session an AI opened).
 async function launch(kind, restore, { background = false } = {}) {
@@ -314,6 +316,7 @@ async function launch(kind, restore, { background = false } = {}) {
   // An update may have arrived before the reply; keep the newer copy.
   if (!state.sessions.has(s.id)) state.sessions.set(s.id, s)
   bindTerm(s.id, t)
+  if (s.dormant) t.term.write(`\r\n  \x1b[2m${DORMANT_TEXT}\x1b[0m`)
   if (background) render()
   else select(s.id)
   return s.id
@@ -338,6 +341,11 @@ function select(id) {
   renderTodos()
   closeViewer()
   const t = id && state.terms.get(id)
+  // Not in the frame callback: that doesn't run while the window is in the background.
+  if (t && state.sessions.get(id)?.dormant) {
+    try { t.fit.fit() } catch {}
+    api.wake(id, t.term.cols, t.term.rows)
+  }
   if (t) {
     requestAnimationFrame(() => {
       try { t.fit.fit() } catch {}
@@ -372,8 +380,8 @@ function renderTabs() {
   const html = [...state.sessions.values()]
     .map(s => {
       const armed = closeArmed.has(s.id)
-      return `<div class="tab ${s.kind} ${s.id === state.active ? 'active' : ''} ${state.attention.has(s.id) ? 'attention' : ''}" data-id="${s.id}" title="${esc(s.cwd)}">
-        <span class="dot ${s.status} ${s.status === 'waiting' && s.detail ? 'ask' : ''}"></span>
+      return `<div class="tab ${s.kind} ${s.id === state.active ? 'active' : ''} ${state.attention.has(s.id) ? 'attention' : ''} ${s.dormant ? 'dormant' : ''}" data-id="${s.id}" title="${esc(s.cwd)}${s.dormant ? '\n尚未載入，點擊恢復對話' : ''}">
+        <span class="dot ${s.status} ${s.status === 'waiting' && s.detail && !s.dormant ? 'ask' : ''}"></span>
         <span class="kind ${s.kind}">${KIND[s.kind].icon}</span>
         ${s.aiOpened ? '<span class="ai-tag" title="由 AI 開啟">[AI]</span>' : ''}
         <span class="title" data-rename="${s.id}" title="${esc(s.title)}（雙擊重新命名）">${esc(s.title)}</span>
@@ -481,7 +489,7 @@ function card(s) {
     : c.serving
       ? `<div class="card-collab">⇄ 正在回覆「${esc(c.serving.title)}」的請求</div>`
       : ''
-  return `<div class="card ${s.status} ${s.kind} ${s.id === state.active ? 'selected' : ''}" data-id="${s.id}" role="button" tabindex="0">
+  return `<div class="card ${s.status} ${s.kind} ${s.id === state.active ? 'selected' : ''} ${s.dormant ? 'dormant' : ''}" data-id="${s.id}" role="button" tabindex="0">
     <div class="card-main">
     <div class="card-head">
       <span class="kind ${s.kind}">${KIND[s.kind].icon}</span>
@@ -511,34 +519,93 @@ $('status-groups').addEventListener('click', e => {
 
 // ---------- todos ----------
 
-// Open follow-ups the AI recorded for the active session's folder; ✕ moves one
-// to done, and done items are never shown again.
+// Follow-ups the AI recorded for the active session's folder. The circle checks
+// one off (it plays out, then moves to the collapsed "done" section, where
+// clicking the circle again restores it).
 const dirKey = d => String(d || '').replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase()
+const CHECK_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 8.4l2.6 2.6L12 5.4"/></svg>'
+const TODO_OUT_MS = 520
+const FOLDER_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.75 4.25c0-.69.56-1.25 1.25-1.25h3.1l1.5 1.6h5.4c.69 0 1.25.56 1.25 1.25v6.4c0 .69-.56 1.25-1.25 1.25H3c-.69 0-1.25-.56-1.25-1.25z"/></svg>'
+const todoUi = { completing: new Set(), seen: null, doneOpen: false }
+
+const startOfToday = () => new Date().setHours(0, 0, 0, 0)
+
+function todoItem(t) {
+  const cls = [todoUi.completing.has(t.id) && 'completing', todoUi.seen && !todoUi.seen.has(t.id) && 'fresh'].filter(Boolean).join(' ')
+  const meta = [t.from && `來自「${esc(t.from)}」`, t.createdAt && ago(t.createdAt)].filter(Boolean).join(' · ')
+  return `<div class="todo ${cls}" data-id="${esc(t.id)}" title="${esc(t.detail || t.title)}\n\n點一下貼到目前對話的輸入框">
+    <button class="todo-check" data-done="${esc(t.id)}" title="完成">${CHECK_SVG}</button>
+    <div class="todo-body">
+      <div class="todo-title">${esc(t.title)}</div>
+      ${t.detail ? `<div class="todo-detail">${esc(t.detail)}</div>` : ''}
+      ${meta ? `<div class="todo-meta">${meta}</div>` : ''}
+    </div>
+    <span class="todo-paste">↵</span>
+  </div>`
+}
 
 function renderTodos() {
   const cwd = gitCwd()
   const hidden = !!state.config.todoHidden
   const panel = $('todo-panel')
-  const list = cwd ? (state.todos || []).filter(t => dirKey(t.cwd) === dirKey(cwd)) : []
+  const here = cwd ? (state.todos || []).filter(t => dirKey(t.cwd) === dirKey(cwd)) : []
+  const open = here.filter(t => !t.done)
+  const done = here.filter(t => t.done)
+  const today = done.filter(t => t.doneAt >= startOfToday()).length
   panel.classList.toggle('collapsed', hidden)
   if (state.todoWidth) panel.style.width = `${state.todoWidth[hidden ? 'closed' : 'open']}px`
-  $('todo-count').textContent = list.length ? String(list.length) : ''
+  $('todo-count').textContent = open.length ? String(open.length) : ''
+  $('todo-today').textContent = today ? `今天完成 ${today}` : ''
   $('todo-close').textContent = hidden ? '▸' : '◂'
   $('todo-close').title = hidden ? '展開待辦' : '收起'
-  $('todo-list').innerHTML = !cwd
-    ? '<div class="group-empty">選一個對話來看它資料夾的待辦</div>'
-    : list.length
-    ? list
-        .map(t => `<div class="todo" title="${esc(t.detail || t.title)}">
-          <span class="todo-title">${esc(t.title)}</span>
-          <button class="todo-x" data-dismiss="${esc(t.id)}" title="移到已完成">✕</button>
-        </div>`)
-        .join('')
-    : '<div class="group-empty">這個資料夾沒有待辦</div>'
+  if (!cwd) {
+    $('todo-list').innerHTML = '<div class="group-empty">選一個對話來看它資料夾的待辦</div>'
+    return
+  }
+  const doneHtml = done.length
+    ? `<div class="todo-done ${todoUi.doneOpen ? 'open' : ''}">
+        <button class="todo-done-head" data-toggle-done><span class="chev">▸</span>已完成<span class="n">${done.length}</span></button>
+        ${todoUi.doneOpen ? done.map(t => `<div class="todo is-done" title="${esc(t.title)}">
+          <button class="todo-check" data-restore="${esc(t.id)}" title="移回待辦">${CHECK_SVG}</button>
+          <div class="todo-body"><div class="todo-title">${esc(t.title)}</div>
+          <div class="todo-meta">${t.done === 'ai' ? 'AI 完成' : '你勾選'} · ${ago(t.doneAt)}</div></div>
+        </div>`).join('') : ''}
+      </div>`
+    : ''
+  // Lists are per project folder; say which one so items never look mixed.
+  const folder = cwd.split(/[\\/]/).filter(Boolean).pop() || cwd
+  $('todo-list').innerHTML =
+    `<div class="todo-scope" title="${esc(cwd)}">${FOLDER_SVG}<span>${esc(folder)}</span></div>` +
+    (open.length ? open.map(todoItem).join('') : `<div class="todo-empty">${CHECK_SVG}<span>${done.length ? '全部完成了' : '這個資料夾沒有待辦'}</span></div>`) +
+    doneHtml
+  // Only items that show up after the first draw get the "new" highlight.
+  if (!todoUi.seen) todoUi.seen = new Set()
+  for (const t of open) todoUi.seen.add(t.id)
 }
 $('todo-list').addEventListener('click', e => {
-  const x = e.target.closest('[data-dismiss]')
-  if (x) api.dismissTodo(x.dataset.dismiss)
+  const check = e.target.closest('[data-done]')
+  if (check) {
+    const id = check.dataset.done
+    if (todoUi.completing.has(id)) return
+    todoUi.completing.add(id)
+    check.closest('.todo').classList.add('completing')
+    // Let the check and strike play before the item leaves the list.
+    setTimeout(() => api.dismissTodo(id), TODO_OUT_MS)
+    return
+  }
+  const restore = e.target.closest('[data-restore]')
+  if (restore) return api.restoreTodo(restore.dataset.restore)
+  if (e.target.closest('[data-toggle-done]')) {
+    todoUi.doneOpen = !todoUi.doneOpen
+    return renderTodos()
+  }
+  // Clicking an item pastes its text into the active session's prompt, unsent.
+  const item = e.target.closest('.todo:not(.is-done)')
+  const t = item && state.terms.get(state.active)
+  if (!t) return
+  // Framed so the user just types what to do with it after the arrow.
+  t.term.paste(`待辦項目: ${item.querySelector('.todo-title').textContent} → `)
+  t.term.focus()
 })
 function setTodoHidden(hidden) {
   state.config.todoHidden = hidden
@@ -1339,6 +1406,8 @@ api.onSessionUpdate(s => {
     api.refreshUsage()
   }
   if (prev && prev.status !== s.status && s.id !== state.active && s.status !== 'working' && !s.collab?.serving) state.attention.add(s.id)
+  // Woken: drop the placeholder before the CLI's first output (the update arrives first).
+  if (prev?.dormant && !s.dormant) state.terms.get(s.id)?.term.reset()
   state.sessions.set(s.id, s)
   scheduleRender()
 })
@@ -1360,6 +1429,7 @@ api.onSessionSpawn(async (req, kind, restore) => {
 })
 api.onTodos(list => {
   state.todos = list
+  for (const id of todoUi.completing) if (!list.some(t => t.id === id && !t.done)) todoUi.completing.delete(id)
   renderTodos()
 })
 api.onCollabEvent(e =>toast(`⇄ 已阻擋「${e.title}」的協作請求：${e.text}`, 'info'))
@@ -1402,9 +1472,11 @@ api.init().then(async ({ config, usage, updates, sessions, version, appUpdate, m
   render()
   refreshGit()
   // Reopen last time's tabs (not on a window reload, where the sessions still live).
+  // Only the tab that was showing resumes right away; the rest wait until selected.
   const tabs = sessions.length ? [] : config.tabs || []
+  const shown = tabs[config.activeTab] ? config.activeTab : tabs.length - 1
   const ids = []
-  for (const tab of tabs) ids.push(await launch(tab.kind, tab))
-  if (tabs.length) select(ids[config.activeTab] ?? state.active)
+  for (const [i, tab] of tabs.entries()) ids.push(await launch(tab.kind, { ...tab, lazy: i !== shown }, { background: i !== shown }))
+  if (tabs.length) select(ids[shown] ?? state.active)
   api.tabsRestored()
 })

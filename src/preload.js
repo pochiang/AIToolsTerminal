@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('aitt', {
   createSession: (kind, cwd, cols, rows, restore) => ipcRenderer.invoke('session:create', kind, cwd, cols, rows, restore),
   input: (id, data) => ipcRenderer.send('session:input', id, data),
   resize: (id, cols, rows) => ipcRenderer.send('session:resize', id, cols, rows),
+  wake: (id, cols, rows) => ipcRenderer.send('session:wake', id, cols, rows),
   rename: (id, name) => ipcRenderer.send('session:rename', id, name),
   ack: id => ipcRenderer.send('session:ack', id),
   runAppUpdate: () => ipcRenderer.invoke('app-update:run'),
@@ -41,6 +42,7 @@ contextBridge.exposeInMainWorld('aitt', {
   onUsage: on('usage:update'),
   onUpdateState: on('update:state'),
   dismissTodo: id => ipcRenderer.send('todos:dismiss', id),
+  restoreTodo: id => ipcRenderer.send('todos:restore', id),
   setTodoPanel: hidden => ipcRenderer.send('todos:panel', hidden),
   onTodos: on('todos:update'),
 })

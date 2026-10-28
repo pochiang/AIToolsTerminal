@@ -301,14 +301,86 @@ function startUpdates() {
 
 // ---------- sessions ----------
 
-function createSession(kind, cwd, cols, rows, restore = {}) {
-  // A plain terminal: PowerShell 7 when installed, else Windows PowerShell.
+// A plain terminal: PowerShell 7 when installed, else Windows PowerShell.
+function exeFor(kind) {
   const exeName = kind === 'shell' ? 'powershell' : kind
   const exe = (kind === 'shell' && resolveExe('pwsh')) || resolveExe(exeName)
   if (!exe) throw new Error(`找不到 ${exeName} 指令，請確認已安裝並在 PATH 中`)
+  return exe
+}
+
+// restore.lazy: a reopened tab that isn't shown yet. Resuming a long conversation
+// takes a while, so it stays dormant (no process) until it is selected or asked.
+function createSession(kind, cwd, cols, rows, restore = {}) {
+  const exe = exeFor(kind)
   if (!fs.existsSync(cwd)) throw new Error(`資料夾不存在：${cwd}`)
 
   const id = `s${++seq}`
+  const s = {
+    id,
+    kind,
+    folder: path.basename(cwd) || cwd,
+    autoTitle: restore.autoTitle || null,
+    customTitle: restore.customTitle || null,
+    convId: restore.convId || null,
+    aiOpened: !!restore.aiOpened,
+    cwd,
+    cols: cols || 120,
+    rows: rows || 30,
+    dormant: !!(restore.lazy && restore.convId),
+    status: 'waiting',
+    detail: '',
+    since: Date.now(),
+    startedAt: Date.now(),
+    everWorked: false,
+    exited: false,
+    lastPrompt: null,
+    lastReply: null,
+    tokens: null,
+    context: null,
+    pty: null,
+    outBuf: '',
+    oscTail: '',
+    inputAt: 0,
+    doneSeq: 0,
+    asksThisTurn: 0,
+    serving: null,
+    waitingOn: null,
+    codex: kind === 'codex' ? { file: null, offset: 0, partial: '' } : null,
+  }
+  if (s.dormant) s.detail = DORMANT_DETAIL
+  else startPty(s, exe)
+  sessions.set(id, s)
+  rememberDir(cwd)
+  saveTabs()
+  return publicSession(s)
+}
+
+const DORMANT_DETAIL = '尚未載入，切到這個分頁時恢復對話'
+
+/** Starts a dormant session's CLI. Returns false when it can't start. */
+function wakeSession(s) {
+  if (!s?.dormant) return !!s
+  let exe
+  try { exe = exeFor(s.kind) } catch (e) {
+    s.detail = e.message
+    send('session:update', publicSession(s))
+    return false
+  }
+  try { startPty(s, exe) } catch (e) {
+    s.detail = `無法恢復：${e.message}`
+    send('session:update', publicSession(s))
+    return false
+  }
+  s.dormant = false
+  s.detail = ''
+  s.startedAt = s.since = Date.now()
+  send('session:update', publicSession(s))
+  return true
+}
+
+function startPty(s, exe) {
+  const { id, kind, cwd } = s
   const mcpEnv = { AITT_PORT: String(hookPort), AITT_SESSION: id, AITT_TOKEN: TOKEN }
   const bridgeEnv = { ...mcpEnv, ELECTRON_RUN_AS_NODE: '1' }
   // Collaboration and to-dos are separate servers, both run by the same bridge.
@@ -324,8 +396,8 @@ function createSession(kind, cwd, cols, rows, restore = {}) {
     args = ['--settings', claudeHookSettings(id), '--mcp-config', mcpFile]
     // Claude reports a session id before anything is written; a conversation that never got a
     // message has no transcript, and resuming it fails with "No conversation found".
-    if (restore.convId && !claudeTranscriptExists(restore.convId)) restore = { ...restore, convId: null }
-    if (restore.convId) args.push('--resume', restore.convId)
+    if (s.convId && !claudeTranscriptExists(s.convId)) s.convId = null
+    if (s.convId) args.push('--resume', s.convId)
   } else if (kind === 'codex') {
     args = Object.entries(servers).flatMap(([name, env]) => [
       '-c', `mcp_servers.${name}.command="${NODE_RUNTIME}"`,
@@ -340,7 +412,7 @@ function createSession(kind, cwd, cols, rows, restore = {}) {
       // being turned into arrow keys that page through Codex's input history.
       '--no-alt-screen',
     )
-    if (restore.convId) args.unshift('resume', restore.convId)
+    if (s.convId) args.unshift('resume', s.convId)
   } else {
     args = ['-NoLogo', '-NoExit', '-EncodedCommand', SHELL_INTEGRATION]
   }
@@ -352,39 +424,10 @@ function createSession(kind, cwd, cols, rows, restore = {}) {
 
   const env = { ...process.env, ...mcpEnv, COLORTERM: 'truecolor', MCP_TOOL_TIMEOUT: String(toolTimeoutSec * 1000) }
 
-  const p = pty.spawn(file, args, { name: 'xterm-256color', cols: cols || 120, rows: rows || 30, cwd, env, useConpty: true })
-  const s = {
-    id,
-    kind,
-    folder: path.basename(cwd) || cwd,
-    autoTitle: restore.autoTitle || null,
-    customTitle: restore.customTitle || null,
-    convId: restore.convId || null,
-    aiOpened: !!restore.aiOpened,
-    cwd,
-    status: 'waiting',
-    detail: '',
-    since: Date.now(),
-    startedAt: Date.now(),
-    everWorked: false,
-    exited: false,
-    lastPrompt: null,
-    lastReply: null,
-    tokens: null,
-    context: null,
-    pty: p,
-    outBuf: '',
-    oscTail: '',
-    inputAt: 0,
-    doneSeq: 0,
-    asksThisTurn: 0,
-    serving: null,
-    waitingOn: null,
-    codex: kind === 'codex' ? { file: null, offset: 0, partial: '' } : null,
-  }
-  sessions.set(id, s)
+  const p = pty.spawn(file, args, { name: 'xterm-256color', cols: s.cols, rows: s.rows, cwd, env, useConpty: true })
+  s.pty = p
   // A resumed Codex conversation keeps writing to its old log; skip what's already there.
-  const oldLog = kind === 'codex' && restore.convId && findRolloutById(restore.convId)
+  const oldLog = kind === 'codex' && s.convId && findRolloutById(s.convId)
   if (oldLog) {
     claimed.add(oldLog)
     s.codex.file = oldLog
@@ -406,9 +449,6 @@ function createSession(kind, cwd, cols, rows, restore = {}) {
     s.pty = null
     setStatus(s, 'done', `程序已結束（代碼 ${exitCode}）`)
   })
-  rememberDir(cwd)
-  saveTabs()
-  return publicSession(s)
 }
 
 // A busy CLI writes many small chunks (a spinner redraws ~10 times a second);
@@ -713,7 +753,7 @@ ipcMain.handle('app:init', () => {
     version: app.getVersion(),
     media: mediaState,
     appUpdate,
-    todos: todos.open(),
+    todos: todos.visible(),
     todoWidth: TODO_WIDTH,
   }
 })
@@ -801,7 +841,16 @@ ipcMain.on('session:input', (_e, id, data) => {
 })
 ipcMain.on('session:resize', (_e, id, cols, rows) => {
   const s = sessions.get(id)
-  if (s?.pty && cols > 0 && rows > 0) try { s.pty.resize(cols, rows) } catch {}
+  if (!s || !(cols > 0 && rows > 0)) return
+  s.cols = cols
+  s.rows = rows
+  if (s.pty) try { s.pty.resize(cols, rows) } catch {}
+})
+ipcMain.on('session:wake', (_e, id, cols, rows) => {
+  const s = sessions.get(id)
+  if (!s?.dormant) return
+  if (cols > 0 && rows > 0) Object.assign(s, { cols, rows })
+  wakeSession(s)
 })
 ipcMain.on('session:rename', (_e, id, name) => {
   const s = sessions.get(id)
@@ -878,6 +927,7 @@ ipcMain.handle('menu:terminal', (_e, hasSelection) => new Promise(resolve => {
 }))
 ipcMain.on('clipboard:write', (_e, text) => clipboard.writeText(text))
 ipcMain.on('todos:dismiss', (_e, id) => todos.dismiss(String(id)))
+ipcMain.on('todos:restore', (_e, id) => todos.restore(String(id)))
 ipcMain.on('todos:panel', (_e, hidden) => {
   const before = todoWidth()
   config.todoHidden = !!hidden

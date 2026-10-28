@@ -28,14 +28,62 @@ async function ignoredPaths(cwd, paths) {
   return new Set((out || '').split('\0').filter(Boolean))
 }
 
-async function readRepo(cwd) {
-  const root = (await git(cwd, ['rev-parse', '--show-toplevel']))?.trim()
-  if (!root) return { isRepo: false }
+// The panel polls every few seconds and each git process has a real start-up
+// cost on Windows, so remember what rarely changes: a folder's repository root,
+// and the log until a ref moves.
+const roots = new Map() // cwd -> repository root
+const logs = new Map() // root -> { sig, out }
 
+/** Changes whenever a ref moves (commit, checkout, branch, tag, fetch); null if unknown. */
+function refsSignature(root) {
+  const gitDir = path.join(root, '.git')
+  try {
+    // A worktree or submodule keeps its refs elsewhere; don't cache those.
+    if (!fs.statSync(gitDir).isDirectory()) return null
+  } catch { return null }
+  const parts = []
+  const add = file => {
+    try {
+      const st = fs.statSync(file)
+      parts.push(file, st.mtimeMs, st.size)
+    } catch {}
+  }
+  const walk = dir => {
+    let entries
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
+    for (const e of entries) {
+      const p = path.join(dir, e.name)
+      if (e.isDirectory()) walk(p)
+      else add(p)
+    }
+  }
+  for (const f of ['HEAD', 'packed-refs', 'FETCH_HEAD', path.join('logs', 'HEAD')]) add(path.join(gitDir, f))
+  walk(path.join(gitDir, 'refs'))
+  return parts.join('|')
+}
+
+async function readRepo(cwd) {
+  let root = roots.get(cwd)
+  if (!root || !fs.existsSync(path.join(root, '.git'))) {
+    root = (await git(cwd, ['rev-parse', '--show-toplevel']))?.trim()
+    if (!root) {
+      roots.delete(cwd)
+      return { isRepo: false }
+    }
+    roots.set(cwd, root)
+  }
+
+  const sig = refsSignature(root)
+  const cached = logs.get(root)
   const [status, log] = await Promise.all([
     // -z keeps paths unquoted; run from the root so they are root-relative.
     git(root, ['status', '--porcelain=v1', '--branch', '--untracked-files=all', '-z']),
-    git(cwd, ['log', '--all', '--date-order', '--decorate=full', `-n${MAX_COMMITS}`, '--format=%H%x1f%P%x1f%D%x1f%an%x1f%at%x1f%s%x1e']),
+    sig && cached?.sig === sig
+      ? cached.out
+      : git(cwd, ['log', '--all', '--date-order', '--decorate=full', `-n${MAX_COMMITS}`, '--format=%H%x1f%P%x1f%D%x1f%an%x1f%at%x1f%s%x1e']).then(out => {
+        if (sig && out != null) logs.set(root, { sig, out })
+        return out
+      }),
   ])
 
   let branch = null

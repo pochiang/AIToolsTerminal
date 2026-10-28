@@ -51,7 +51,7 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf, spa
     const others = [...sessions.values()].filter(o => o.id !== s.id && !o.exited && o.kind !== 'shell')
     const same = o => path.resolve(o.cwd).toLowerCase() === path.resolve(s.cwd).toLowerCase()
     const lines = others.map(
-      o => `- ${o.id}｜${KIND_NAME[o.kind]}${o.aiOpened ? '（AI 開啟）' : ''}｜「${titleOf(o)}」｜${same(o) ? '與你同資料夾' : `不同資料夾（${o.folder}）`}｜${STATUS_NAME[o.status] || o.status}` +
+      o => `- ${o.id}｜${KIND_NAME[o.kind]}${o.aiOpened ? '（AI 開啟）' : ''}｜「${titleOf(o)}」｜${same(o) ? '與你同資料夾' : `不同資料夾（${o.folder}）`}｜${o.dormant ? '未載入（無法詢問）' : STATUS_NAME[o.status] || o.status}` +
         (upstream(s).includes(o.id) ? '｜正在等你回覆（不可詢問）' : ''),
     )
     // Pick by what the other session is working on, not just what it can do.
@@ -88,6 +88,10 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf, spa
     if (s.asksThisTurn >= L.maxAsksPerTurn)
       return blocked(s, `本回合已詢問 ${s.asksThisTurn} 次，達到上限 ${L.maxAsksPerTurn}。請整合目前的回覆完成工作，不要再呼叫 ask_session。`)
 
+    // A reopened tab not resumed yet. Resuming may stop at Claude's own "resume or start
+    // new?" menu, which is the user's call, so don't do it on an AI's behalf.
+    if (target.dormant)
+      return fail(`「${titleOf(target)}」尚未載入（使用者還沒切到該分頁），目前無法詢問。請改問其他對話或自行完成。`)
     s.asksThisTurn++
     const r = { id: `r${++seq}`, from: s.id, to: target.id, depth, message, state: 'queued' }
     requests.set(r.id, r)

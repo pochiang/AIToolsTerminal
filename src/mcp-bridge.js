@@ -50,13 +50,14 @@ const TODO_TOOLS = [
   {
     name: 'add_todo',
     description:
-      '記下一項你建議、但使用者這回合沒有要處理的後續事項（例如「之後可以再改 X」），存在這個資料夾的待辦清單，使用者會在 AI Tools Terminal 側邊欄看到。' +
-      '一項一件事、標題簡短；使用者要你現在就做的不用記。',
+      '記下一項你建議、但使用者這回合沒有要處理的後續事項（例如「之後可以再改 X」），存在資料夾的待辦清單，使用者會在 AI Tools Terminal 側邊欄看到。' +
+      '一項一件事、標題簡短；使用者要你現在就做的不用記。事項屬於別的專案（不是你目前資料夾）時，用 folder 指定該專案的資料夾。',
     inputSchema: {
       type: 'object',
       properties: {
         title: { type: 'string', description: '簡短標題，一行內，例如「設定頁加入匯出功能」' },
         detail: { type: 'string', description: '選填：之後接手需要的背景，例如相關檔案或原因' },
+        folder: { type: 'string', description: '選填：事項所屬專案的資料夾絕對路徑，預設為你目前的資料夾' },
       },
       required: ['title'],
       additionalProperties: false,
@@ -65,7 +66,11 @@ const TODO_TOOLS = [
   {
     name: 'list_todos',
     description: '列出這個資料夾還沒完成的待辦（已完成或被使用者移除的不會列出）。使用者問還有什麼要做、或你要接續之前的工作時使用。',
-    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    inputSchema: {
+      type: 'object',
+      properties: { folder: { type: 'string', description: '選填：要看哪個專案資料夾的待辦，預設為你目前的資料夾' } },
+      additionalProperties: false,
+    },
   },
   {
     name: 'complete_todo',
