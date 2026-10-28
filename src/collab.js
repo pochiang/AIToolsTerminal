@@ -9,12 +9,16 @@
 // - timeout: a request gives up after `timeoutMin` minutes;
 // - the global switch and "stop all" in the UI.
 //
+// With `jev` on, each ask is also scored by Jev (see jev.js); below
+// `jevThreshold`% it is refused. If Jev can't be reached the ask goes through.
+//
 // `open_session` lets a session start a new one to ask (off by default); at
 // most `maxOpened` AI-opened sessions run at once, in the opener's folder.
 
 const path = require('path')
+const jev = require('./jev')
 
-const DEFAULTS = { enabled: true, maxAsksPerTurn: 3, maxDepth: 2, timeoutMin: 10, allowOpen: false, maxOpened: 2 }
+const DEFAULTS = { enabled: true, maxAsksPerTurn: 3, maxDepth: 2, timeoutMin: 10, allowOpen: false, maxOpened: 2, jev: false, jevThreshold: 50 }
 const KIND_NAME = { claude: 'Claude Code', codex: 'Codex' }
 const STATUS_NAME = { working: '工作中', waiting: '等待中', done: '完成' }
 
@@ -93,6 +97,18 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf, spa
     if (target.dormant)
       return fail(`「${titleOf(target)}」尚未載入（使用者還沒切到該分頁），目前無法詢問。請改問其他對話或自行完成。`)
     s.asksThisTurn++
+    if (L.jev) {
+      const same = path.resolve(target.cwd).toLowerCase() === path.resolve(s.cwd).toLowerCase()
+      const v = await jev.judge(config, {
+        from: `${KIND_NAME[s.kind]} "${titleOf(s)}"`,
+        to: `${KIND_NAME[target.kind]} "${titleOf(target)}", ${same ? 'same folder' : `different folder (${target.folder})`}, ${target.status}`,
+        task: parent ? parent.message : s.lastPrompt,
+        message,
+      })
+      if (v.error) send('collab:event', { title: titleOf(s), text: `Jev 判斷失敗（${v.error}），已直接放行。`, note: true })
+      else if (v.score * 100 < L.jevThreshold)
+        return blocked(s, `Jev 判斷這個請求不需要交給「${titleOf(target)}」（評分 ${Math.round(v.score * 100)}%，門檻 ${L.jevThreshold}%）。請自行完成工作。`)
+    }
     const r = { id: `r${++seq}`, from: s.id, to: target.id, depth, message, state: 'queued' }
     requests.set(r.id, r)
     s.waitingOn = r.id
@@ -225,6 +241,8 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf, spa
       timeoutMin: n(next.timeoutMin ?? c.timeoutMin, 1, 60, c.timeoutMin),
       allowOpen: next.allowOpen === undefined ? c.allowOpen : !!next.allowOpen,
       maxOpened: n(next.maxOpened ?? c.maxOpened, 1, 5, c.maxOpened),
+      jev: next.jev === undefined ? c.jev : !!next.jev,
+      jevThreshold: n(next.jevThreshold ?? c.jevThreshold, 1, 99, c.jevThreshold),
     }
     saveConfig()
     if (!config.collab.enabled) stopAll()

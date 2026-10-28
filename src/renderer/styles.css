@@ -360,6 +360,18 @@ code { font-family: var(--mono); color: var(--text); }
   border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px;
   font: inherit; text-align: right;
 }
+.key-row { display: flex; gap: 6px; }
+.key-row input {
+  flex: 1; min-width: 0;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px;
+  font: inherit; font-size: 12px;
+}
+.key-row button {
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--line); border-radius: 4px; padding: 3px 10px; font-size: 12px;
+}
+.key-row button:disabled { opacity: .4; cursor: default; }
 .stop-btn {
   background: rgba(248,81,73,.1); border: 1px solid rgba(248,81,73,.45); color: #ffb3ae;
   border-radius: 6px; padding: 6px; font-size: 12px;

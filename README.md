@@ -75,6 +75,7 @@ npm run dist     # 產生 dist\AI-Tools-Terminal-Setup-<版本>.exe
 | 最多轉介層數 | 2 層 | A→B→C 可以，C 不能再轉問 |
 | 等待逾時 | 10 分鐘 | 超過就放棄並回報 |
 | 總開關／停止全部 | — | 關閉協作或按「停止所有進行中的協作」立即中止 |
+| Jev 判斷 | 關 | 每次 `ask_session` 前由 [Jev](https://docs.typesafe.ai)（TypeSafe）評分是否值得交給對方，低於門檻（預設 50%）就擋下請 AI 自行完成；連不上 Jev 時放行。金鑰在「⇄ 協作」填入，以 Windows DPAPI 加密存在 config.json |
 
 Codex 因為用了 `-c` 設定覆寫，會以獨立模式執行（啟動時有一則「Running without the shared background server」警告），這是讓每個對話能被正確識別的必要條件。
 

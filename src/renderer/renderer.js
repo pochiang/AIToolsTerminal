@@ -701,6 +701,11 @@ function fillCollabMenu() {
   $('collab-timeout').value = c.timeoutMin
   $('collab-open').checked = c.allowOpen
   $('collab-max-open').value = c.maxOpened
+  $('collab-jev').checked = c.jev
+  $('collab-jev-threshold').value = c.jevThreshold
+  state.jevHasKey ??= !!state.config.jevKey
+  $('jev-key').placeholder = state.jevHasKey ? '金鑰已設定（輸入新的以取代）' : 'TypeSafe API 金鑰'
+  $('jev-test').disabled = !state.jevHasKey
 }
 
 $('collab-btn').addEventListener('click', e => {
@@ -720,11 +725,28 @@ async function saveCollab() {
     timeoutMin: $('collab-timeout').value,
     allowOpen: $('collab-open').checked,
     maxOpened: $('collab-max-open').value,
+    jev: $('collab-jev').checked,
+    jevThreshold: $('collab-jev-threshold').value,
   })
   fillCollabMenu()
   renderCollabButton()
 }
-for (const id of ['collab-enabled', 'collab-asks', 'collab-depth', 'collab-timeout', 'collab-open', 'collab-max-open']) $(id).addEventListener('change', saveCollab)
+for (const id of ['collab-enabled', 'collab-asks', 'collab-depth', 'collab-timeout', 'collab-open', 'collab-max-open', 'collab-jev', 'collab-jev-threshold'])
+  $(id).addEventListener('change', saveCollab)
+$('jev-key').addEventListener('change', async () => {
+  const key = $('jev-key').value.trim()
+  if (!key) return
+  $('jev-key').value = ''
+  state.jevHasKey = await api.setJevKey(key)
+  fillCollabMenu()
+  toast('Jev 金鑰已儲存', 'info')
+})
+$('jev-test').addEventListener('click', async () => {
+  $('jev-test').disabled = true
+  const r = await api.testJev()
+  $('jev-test').disabled = !state.jevHasKey
+  toast(r.ok ? 'Jev 連線成功' : `Jev 連線失敗：${r.error}`, r.ok ? 'info' : 'error')
+})
 $('collab-stop').addEventListener('click', () => api.stopCollab())
 
 // ---------- git panel ----------
@@ -1432,7 +1454,7 @@ api.onTodos(list => {
   for (const id of todoUi.completing) if (!list.some(t => t.id === id && !t.done)) todoUi.completing.delete(id)
   renderTodos()
 })
-api.onCollabEvent(e =>toast(`⇄ 已阻擋「${e.title}」的協作請求：${e.text}`, 'info'))
+api.onCollabEvent(e => toast(e.note ? `⇄「${e.title}」：${e.text}` : `⇄ 已阻擋「${e.title}」的協作請求：${e.text}`, 'info'))
 api.onUsage(u => {
   state.usage = u
   renderUsage()

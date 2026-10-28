@@ -8,6 +8,7 @@ const { execFileSync } = require('child_process')
 const pty = require('@lydell/node-pty')
 const usage = require('./usage')
 const { createCollab } = require('./collab')
+const jev = require('./jev')
 const { createTodos, TODO_TOOLS } = require('./todos')
 const gitOps = require('./git')
 const { readRepo, workingDiff, showCommit } = gitOps
@@ -913,6 +914,12 @@ ipcMain.handle('git:push', (_e, cwd) => gitOps.push(cwd))
 ipcMain.on('session:spawned', (_e, req, result) => spawns.get(req)?.(result || { error: '開啟失敗' }))
 ipcMain.handle('collab:set', (_e, next) => collab.setLimits(next || {}))
 ipcMain.on('collab:stop', () => collab.stopAll())
+ipcMain.handle('jev:key', (_e, key) => {
+  jev.saveKey(config, key)
+  saveConfig()
+  return !!config.jevKey
+})
+ipcMain.handle('jev:test', () => jev.test(config))
 ipcMain.handle('clipboard:read', () => clipboard.readText())
 ipcMain.handle('menu:terminal', (_e, hasSelection) => new Promise(resolve => {
   let picked = null

@@ -108,6 +108,16 @@
             </label>
             <label class="num-row">AI 最多同時開<input type="number" id="collab-max-open" min="1" max="5" />個</label>
             <p class="hint">沒有可詢問的對話時，AI 可用 <code>open_session</code> 在背景開一個新頁籤（標上 [AI]，與發起方同資料夾）。每個新對話都會消耗用量。</p>
+            <label class="switch-row">
+              <span>由 Jev 判斷是否需要協助</span>
+              <input type="checkbox" role="switch" class="toggle" id="collab-jev" />
+            </label>
+            <div class="key-row">
+              <input type="password" id="jev-key" placeholder="TypeSafe API 金鑰" autocomplete="off" spellcheck="false" />
+              <button id="jev-test">測試</button>
+            </div>
+            <label class="num-row">Jev 評分低於<input type="number" id="collab-jev-threshold" min="1" max="99" />% 就擋下</label>
+            <p class="hint">每次 <code>ask_session</code> 前，先把任務與請求交給 Jev 評分，分數不夠就請 AI 自行完成。Jev 連不上時一律放行。金鑰以 Windows 加密保存。</p>
             <button class="stop-btn" id="collab-stop">停止所有進行中的協作</button>
           </div>
         </div>

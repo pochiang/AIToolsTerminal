@@ -29,6 +29,8 @@ contextBridge.exposeInMainWorld('aitt', {
   gitPush: cwd => ipcRenderer.invoke('git:push', cwd),
   setCollab: next => ipcRenderer.invoke('collab:set', next),
   stopCollab: () => ipcRenderer.send('collab:stop'),
+  setJevKey: key => ipcRenderer.invoke('jev:key', key),
+  testJev: () => ipcRenderer.invoke('jev:test'),
   onCollabEvent: on('collab:event'),
   onSessionSpawn: on('session:spawn'),
   spawned: (req, result) => ipcRenderer.send('session:spawned', req, result),
