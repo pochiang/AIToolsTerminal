@@ -52,6 +52,11 @@ function saveConfig() {
   fs.mkdirSync(path.dirname(CONFIG_FILE), { recursive: true })
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2))
 }
+// What the renderer gets: secrets stay in this process.
+function publicConfig() {
+  const { jevKey, ...rest } = config
+  return { ...rest, jevHasKey: !!jevKey }
+}
 // Open tabs, so the next launch can reopen them and resume their conversations.
 function saveTabs() {
   if (restoring) return
@@ -747,7 +752,7 @@ async function refreshCodex() {
 ipcMain.handle('app:init', () => {
   restoring = !sessions.size && !!config.tabs?.length
   return {
-    config,
+    config: publicConfig(),
     usage: usageState,
     updates: updateState,
     sessions: [...sessions.values()].map(publicSession),
@@ -891,11 +896,11 @@ ipcMain.handle('dir:pick', async () => {
   const r = await dialog.showOpenDialog(win, { defaultPath: config.cwd, properties: ['openDirectory'] })
   if (r.canceled || !r.filePaths[0]) return null
   rememberDir(r.filePaths[0])
-  return config
+  return publicConfig()
 })
 ipcMain.handle('dir:set', (_e, dir) => {
   if (fs.existsSync(dir)) rememberDir(dir)
-  return config
+  return publicConfig()
 })
 let mediaState = null
 let media = null
@@ -915,9 +920,9 @@ ipcMain.on('session:spawned', (_e, req, result) => spawns.get(req)?.(result || {
 ipcMain.handle('collab:set', (_e, next) => collab.setLimits(next || {}))
 ipcMain.on('collab:stop', () => collab.stopAll())
 ipcMain.handle('jev:key', (_e, key) => {
-  jev.saveKey(config, key)
-  saveConfig()
-  return !!config.jevKey
+  const error = jev.saveKey(config, key)
+  if (!error) saveConfig()
+  return { hasKey: !!config.jevKey, error }
 })
 ipcMain.handle('jev:test', () => jev.test(config))
 ipcMain.handle('clipboard:read', () => clipboard.readText())

@@ -16,18 +16,19 @@ const QUESTION =
   'It is NOT worthwhile when the requester could simply do it alone, the request is trivial, ' +
   'or the other agent is busy with something unrelated.'
 
+/** Returns an error message, or null. Never stores the key unencrypted. */
 function saveKey(config, key) {
   key = String(key || '').trim()
   if (!key) delete config.jevKey
-  else config.jevKey = safeStorage.isEncryptionAvailable()
-    ? { enc: safeStorage.encryptString(key).toString('base64') }
-    : { plain: key }
+  else if (!safeStorage.isEncryptionAvailable()) return '系統加密不可用，無法安全保存金鑰'
+  else config.jevKey = { enc: safeStorage.encryptString(key).toString('base64') }
+  return null
 }
 
 function loadKey(config) {
   const k = config.jevKey
-  if (!k) return ''
-  try { return k.enc ? safeStorage.decryptString(Buffer.from(k.enc, 'base64')) : k.plain || '' } catch { return '' }
+  if (!k?.enc) return ''
+  try { return safeStorage.decryptString(Buffer.from(k.enc, 'base64')) } catch { return '' }
 }
 
 async function ask(key, state) {

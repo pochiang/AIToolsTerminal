@@ -30,6 +30,7 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf, spa
   const requests = new Map()
   let seq = 0
   let opening = 0
+  let stops = 0 // bumped by stopAll, so asks still being scored by Jev give up
 
   const limits = () => config.collab
 
@@ -45,6 +46,22 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf, spa
     return out
   }
 
+  /** Whether `t` is waiting, directly or through a chain, on `s` (queued asks included). */
+  function waitsOn(t, s) {
+    const seen = new Set()
+    let r = t.waitingOn && requests.get(t.waitingOn)
+    while (r && !seen.has(r.to)) {
+      if (r.to === s.id) return true
+      seen.add(r.to)
+      const next = sessions.get(r.to)
+      r = next?.waitingOn && requests.get(next.waitingOn)
+    }
+    return false
+  }
+
+  const cycles = (s, target) => upstream(s).includes(target.id) || waitsOn(target, s)
+  const cycleText = target => `「${titleOf(target)}」正在等你的回覆，不能反問它（避免循環）。請直接完成並回覆。`
+
   function blocked(s, text) {
     send('collab:event', { title: titleOf(s), text })
     return fail(text)
@@ -56,7 +73,7 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf, spa
     const same = o => path.resolve(o.cwd).toLowerCase() === path.resolve(s.cwd).toLowerCase()
     const lines = others.map(
       o => `- ${o.id}｜${KIND_NAME[o.kind]}${o.aiOpened ? '（AI 開啟）' : ''}｜「${titleOf(o)}」｜${same(o) ? '與你同資料夾' : `不同資料夾（${o.folder}）`}｜${o.dormant ? '未載入（無法詢問）' : STATUS_NAME[o.status] || o.status}` +
-        (upstream(s).includes(o.id) ? '｜正在等你回覆（不可詢問）' : ''),
+        (cycles(s, o) ? '｜正在等你回覆（不可詢問）' : ''),
     )
     // Pick by what the other session is working on, not just what it can do.
     const hint =
@@ -83,8 +100,7 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf, spa
     if (target.id === s.id) return fail('不能詢問自己。')
     const message = String(args.message || '').trim()
     if (!message) return fail('訊息不可為空。')
-    if (upstream(s).includes(target.id))
-      return blocked(s, `「${titleOf(target)}」正在等你的回覆，不能反問它（避免循環）。請直接完成並回覆。`)
+    if (cycles(s, target)) return blocked(s, cycleText(target))
     const parent = s.serving ? requests.get(s.serving) : null
     const depth = (parent?.depth || 0) + 1
     if (depth > L.maxDepth)
@@ -99,12 +115,20 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf, spa
     s.asksThisTurn++
     if (L.jev) {
       const same = path.resolve(target.cwd).toLowerCase() === path.resolve(s.cwd).toLowerCase()
+      const epoch = stops
+      let cancelled = false
+      signal.abort = () => (cancelled = true)
       const v = await jev.judge(config, {
         from: `${KIND_NAME[s.kind]} "${titleOf(s)}"`,
         to: `${KIND_NAME[target.kind]} "${titleOf(target)}", ${same ? 'same folder' : `different folder (${target.folder})`}, ${target.status}`,
         task: parent ? parent.message : s.lastPrompt,
         message,
       })
+      // Things may have changed while Jev was scoring.
+      if (cancelled) return fail('已取消。')
+      if (stops !== epoch || !limits().enabled) return fail('使用者已停止協作請求。請自行完成工作，不要再呼叫 ask_session。')
+      if (target.exited || !sessions.has(target.id)) return fail('對方對話已關閉。')
+      if (cycles(s, target)) return blocked(s, cycleText(target))
       if (v.error) send('collab:event', { title: titleOf(s), text: `Jev 判斷失敗（${v.error}），已直接放行。`, note: true })
       else if (v.score * 100 < L.jevThreshold)
         return blocked(s, `Jev 判斷這個請求不需要交給「${titleOf(target)}」（評分 ${Math.round(v.score * 100)}%，門檻 ${L.jevThreshold}%）。請自行完成工作。`)
@@ -215,6 +239,7 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf, spa
   }
 
   function stopAll() {
+    stops++
     cancelSpawns()
     for (const r of requests.values())
       r.finish?.(fail('使用者已停止所有協作請求。請自行完成工作，不要再呼叫 ask_session。'))

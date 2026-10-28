@@ -703,7 +703,7 @@ function fillCollabMenu() {
   $('collab-max-open').value = c.maxOpened
   $('collab-jev').checked = c.jev
   $('collab-jev-threshold').value = c.jevThreshold
-  state.jevHasKey ??= !!state.config.jevKey
+  state.jevHasKey ??= !!state.config.jevHasKey
   $('jev-key').placeholder = state.jevHasKey ? '金鑰已設定（輸入新的以取代）' : 'TypeSafe API 金鑰'
   $('jev-test').disabled = !state.jevHasKey
 }
@@ -737,9 +737,10 @@ $('jev-key').addEventListener('change', async () => {
   const key = $('jev-key').value.trim()
   if (!key) return
   $('jev-key').value = ''
-  state.jevHasKey = await api.setJevKey(key)
+  const r = await api.setJevKey(key)
+  state.jevHasKey = r.hasKey
   fillCollabMenu()
-  toast('Jev 金鑰已儲存', 'info')
+  toast(r.error ? `Jev 金鑰未儲存：${r.error}` : 'Jev 金鑰已儲存', r.error ? 'error' : 'info')
 })
 $('jev-test').addEventListener('click', async () => {
   $('jev-test').disabled = true
