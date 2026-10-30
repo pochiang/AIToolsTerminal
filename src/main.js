@@ -292,13 +292,17 @@ function setContext(s, ctx) {
 // ---------- CLI updates ----------
 
 const updateState = { claude: { state: 'pending' }, codex: { state: 'pending' } }
-const updating = {}
 
+// Runs in the background so tabs open right away. Sessions that were already
+// running keep the old version; `stale` asks for a restart to pick up the new one.
 function startUpdates() {
   for (const kind of ['claude', 'codex']) {
     updateState[kind] = { state: 'updating' }
     send('update:state', updateState)
-    updating[kind] = updateCli(resolveExe(kind)).then(r => {
+    updateCli(resolveExe(kind)).then(r => {
+      const doneAt = Date.now()
+      if (r.state === 'updated')
+        r.stale = [...sessions.values()].some(s => s.kind === kind && s.pty && !s.exited && s.startedAt < doneAt)
       updateState[kind] = r
       send('update:state', updateState)
     })
@@ -814,13 +818,29 @@ ipcMain.handle('app-update:run', async () => {
   return {}
 })
 
+// Relaunch so running CLIs restart on their updated version; tabs resume their conversations.
+ipcMain.handle('cli-update:restart', async () => {
+  const working = [...sessions.values()].filter(s => s.status === 'working' && !s.exited)
+  if (working.length) {
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'warning',
+      buttons: ['重新啟動', '取消'],
+      defaultId: 1,
+      cancelId: 1,
+      message: `有 ${working.length} 個對話正在工作`,
+      detail: '重新啟動會中斷進行中的工作；頁籤與對話會在重開後自動接回。',
+    })
+    if (response !== 0) return
+  }
+  app.relaunch()
+  app.quit()
+})
+
 ipcMain.on('tabs:restored', () => {
   restoring = false
   saveTabs()
 })
 ipcMain.handle('session:create', async (_e, kind, cwd, cols, rows, restore) => {
-  // Don't start a CLI while its update may be replacing the executable.
-  await updating[kind]
   const spawnReq = restore?.spawnReq
   if (spawnReq && !spawns.has(spawnReq)) return { error: 'AI 開啟對話的請求已取消或逾時' }
   try {

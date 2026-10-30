@@ -294,7 +294,6 @@ const DORMANT_TEXT = '這個對話還沒載入（重開時只先恢復目前的�
 // restore: a saved tab ({ cwd, convId, titles }) to reopen instead of a fresh session.
 // background: open without switching to it (a session an AI opened).
 async function launch(kind, restore, { background = false } = {}) {
-  if (state.updates?.[kind]?.state === 'updating') toast(`${KIND[kind].name} 正在更新，完成後會自動開啟`, 'info')
   const holder = document.createElement('div')
   holder.className = background ? 'term' : 'term active'
   $('terms').appendChild(holder)
@@ -1469,7 +1468,16 @@ api.onUpdateState(u => {
   }
   state.updates = u
   renderUsage()
+  renderCliRestart()
 })
+// Shown when a CLI updated in the background while its sessions were running.
+function renderCliRestart() {
+  const stale = ['claude', 'codex'].filter(k => state.updates?.[k]?.state === 'updated' && state.updates[k].stale)
+  const b = $('cli-restart')
+  b.hidden = !stale.length
+  b.title = stale.map(k => `${KIND[k].name}：v${state.updates[k].before} → v${state.updates[k].after}`).join('\n')
+}
+$('cli-restart').addEventListener('click', () => api.restartForCliUpdate())
 
 const ro = new ResizeObserver(() => {
   const t = state.active && state.terms.get(state.active)
@@ -1490,6 +1498,7 @@ api.init().then(async ({ config, usage, updates, sessions, version, appUpdate, m
   renderAppUpdate()
   state.usage = usage
   state.updates = updates
+  renderCliRestart()
   renderDir()
   renderUsage()
   render()
