@@ -11,10 +11,11 @@ const ENDPOINT = 'https://api.typesafe.ai/v1/systemone'
 const TIMEOUT_MS = 10000
 
 const QUESTION =
-  'Handing this request to the other AI agent is worthwhile: it needs a second opinion, an independent review, ' +
-  'or work that can run in parallel, and the other agent is relevant to it (same project or topic). ' +
-  'It is NOT worthwhile when the requester could simply do it alone, the request is trivial, ' +
-  'or the other agent is busy with something unrelated.'
+  'Handing this request to the other AI agent is worthwhile. A different model catching blind spots is valuable even ' +
+  'when the requester could do the work itself, so reviewing non-trivial changes, giving a second opinion on a design ' +
+  'or diagnosis, or taking a parallel piece of work all count as worthwhile. ' +
+  'It is NOT worthwhile only when the request is trivial (a tiny edit or a simple fact), ' +
+  'or the other agent is busy with an unrelated project.'
 
 /** Returns an error message, or null. Never stores the key unencrypted. */
 function saveKey(config, key) {
