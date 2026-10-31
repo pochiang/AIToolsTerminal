@@ -376,6 +376,8 @@ function removeSession(id) {
 const closeArmed = new Map()
 
 function renderTabs() {
+  // Rebuilding would drop the tab being dragged; the drop renders.
+  if (tabDrag?.active) return
   const html = [...state.sessions.values()]
     .map(s => {
       const armed = closeArmed.has(s.id)
@@ -423,6 +425,85 @@ $('tabs').addEventListener('auxclick', e => {
   const tab = e.target.closest('.tab')
   if (e.button === 1 && tab) closeSession(tab.dataset.id)
 })
+
+// Dragging a tab, browser style: it follows the pointer and the others slide
+// out of its way; the order is kept on drop.
+let tabDrag = null
+$('tabs').addEventListener('mousedown', e => {
+  const tab = e.button === 0 && !e.target.closest('[data-close], input') && e.target.closest('.tab')
+  if (!tab) return
+  tabDrag = { el: tab, x0: e.clientX, grab: e.clientX - tab.getBoundingClientRect().left, tx: 0, active: false }
+  window.addEventListener('mousemove', dragTab)
+  window.addEventListener('mouseup', dropTab)
+})
+
+function dragTab(e) {
+  const d = tabDrag
+  if (!d.active) {
+    if (Math.abs(e.clientX - d.x0) < 5) return
+    d.active = true
+    d.el.classList.add('dragging')
+    $('tabs').classList.add('reordering')
+  }
+  const bar = $('tabs')
+  const others = [...bar.querySelectorAll('.tab')].filter(t => t !== d.el)
+  // Work in layout positions (offsetLeft), which ignore transforms, so the
+  // slide animations don't throw off the midpoints. origin: their screen x.
+  const origin = d.el.getBoundingClientRect().left - d.tx - d.el.offsetLeft
+  const box = bar.getBoundingClientRect()
+  const width = d.el.offsetWidth
+  // Where the dragged tab's left edge goes, kept inside the bar.
+  const left = Math.max(box.left, Math.min(e.clientX - d.grab, box.right - width)) - origin
+  const center = left + width / 2
+  const before = others.find(t => center < t.offsetLeft + t.offsetWidth / 2) || null
+  if (before !== nextTab(d.el)) {
+    // FLIP: move it in the DOM, then slide the others from where they were.
+    const old = new Map(others.map(t => [t, t.offsetLeft]))
+    bar.insertBefore(d.el, before)
+    for (const t of others) {
+      const shift = old.get(t) - t.offsetLeft
+      if (!shift) continue
+      t.style.transition = 'none'
+      t.style.transform = `translateX(${shift}px)`
+      requestAnimationFrame(() => {
+        t.style.transition = 'transform .15s ease'
+        t.style.transform = ''
+      })
+    }
+  }
+  d.tx = left - d.el.offsetLeft
+  d.el.style.transform = `translateX(${d.tx}px)`
+}
+const nextTab = el => {
+  let n = el.nextElementSibling
+  while (n && !n.classList.contains('tab')) n = n.nextElementSibling
+  return n
+}
+
+function dropTab() {
+  window.removeEventListener('mousemove', dragTab)
+  window.removeEventListener('mouseup', dropTab)
+  const d = tabDrag
+  tabDrag = null
+  if (!d?.active) return
+  const bar = $('tabs')
+  bar.classList.remove('reordering')
+  d.el.classList.remove('dragging')
+  // Settle into its slot, then rebuild from the new order.
+  d.el.style.transition = 'transform .15s ease'
+  d.el.style.transform = ''
+  const ids = [...bar.querySelectorAll('.tab')].map(t => t.dataset.id)
+  const moved = ids.join() !== [...state.sessions.keys()].join()
+  if (moved) {
+    const rank = new Map(ids.map((id, i) => [id, i]))
+    state.sessions = new Map([...state.sessions].sort(([a], [b]) => (rank.get(a) ?? Infinity) - (rank.get(b) ?? Infinity)))
+    api.reorder([...state.sessions.keys()])
+  }
+  setTimeout(() => {
+    lastTabsHtml = ''
+    render()
+  }, 160)
+}
 
 function renderStatus() {
   const order = s => STATUS[s.status]?.order ?? 2

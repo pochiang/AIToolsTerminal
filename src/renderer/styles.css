@@ -215,6 +215,8 @@ code { font-family: var(--mono); color: var(--text); }
   position: relative;
 }
 .tab { border-top: 2px solid transparent; }
+.tabs.reordering .tab { cursor: grabbing; }
+.tab.dragging { z-index: 1; box-shadow: 0 2px 10px rgba(0, 0, 0, .35); }
 .tab.claude { background: var(--claude-tint); }
 .tab.codex { background: var(--codex-tint); }
 .tab.shell { background: var(--shell-tint); }

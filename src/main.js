@@ -885,6 +885,15 @@ ipcMain.on('session:rename', (_e, id, name) => {
   send('session:update', publicSession(s))
   saveTabs()
 })
+// Tabs dragged into a new order; the saved order is what reopens next launch.
+ipcMain.on('session:reorder', (_e, ids) => {
+  if (!Array.isArray(ids)) return
+  const rank = new Map(ids.map((id, i) => [id, i]))
+  const list = [...sessions.values()].sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity))
+  sessions.clear()
+  for (const s of list) sessions.set(s.id, s)
+  saveTabs()
+})
 // Clicking a finished card marks it seen: back to waiting, with no notification.
 ipcMain.on('session:ack', (_e, id) => {
   const s = sessions.get(id)

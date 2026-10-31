@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('aitt', {
   input: (id, data) => ipcRenderer.send('session:input', id, data),
   resize: (id, cols, rows) => ipcRenderer.send('session:resize', id, cols, rows),
   wake: (id, cols, rows) => ipcRenderer.send('session:wake', id, cols, rows),
+  reorder: ids => ipcRenderer.send('session:reorder', ids),
   rename: (id, name) => ipcRenderer.send('session:rename', id, name),
   ack: id => ipcRenderer.send('session:ack', id),
   runAppUpdate: () => ipcRenderer.invoke('app-update:run'),
