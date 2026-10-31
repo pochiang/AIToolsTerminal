@@ -213,6 +213,7 @@ code { font-family: var(--mono); color: var(--text); }
   color: var(--muted);
   white-space: nowrap;
   position: relative;
+  flex: none; width: 200px; box-sizing: border-box;
 }
 .tab { border-top: 2px solid transparent; }
 .tabs.reordering .tab { cursor: grabbing; }
@@ -237,7 +238,9 @@ code { font-family: var(--mono); color: var(--text); }
 .tab .close:hover { background: #2d3345; color: var(--text); }
 .tab .close.confirm { color: var(--danger); font-size: 11px; }
 .tab.attention .title::after { content: ' •'; color: var(--waiting); }
-.tab .title { max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+.tab .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tab .close { margin-left: auto; flex: none; }
+.tab .rename { flex: 1; width: auto; }
 .rename {
   font: inherit; color: var(--text);
   background: var(--bg); border: 1px solid var(--working); border-radius: 4px;
