@@ -240,6 +240,8 @@ function claudeHookSettings(id) {
     permissions: { allow: ['mcp__aitt__list_sessions', 'mcp__aitt__ask_session', 'mcp__aitt__open_session', ...TODO_TOOLS.map(t => `mcp__aitt-todo__${t}`)] },
     hooks: {
       UserPromptSubmit: [{ hooks: cmd('UserPromptSubmit') }],
+      // Only edits: the first one in a turn may be held back to discuss the plan first.
+      PreToolUse: [{ matcher: [...EDIT_TOOLS].join('|'), hooks: cmd('PreToolUse') }],
       PostToolUse: [{ matcher: '*', hooks: cmd('PostToolUse') }],
       Notification: [{ hooks: cmd('Notification') }],
       Stop: [{ hooks: cmd('Stop') }],
@@ -355,6 +357,9 @@ function createSession(kind, cwd, cols, rows, restore = {}) {
     doneSeq: 0,
     asksThisTurn: 0,
     editsThisTurn: 0,
+    askedThisTurn: false,
+    reviewedThisTurn: false,
+    discussNudged: false,
     nudgedThisTurn: false,
     serving: null,
     waitingOn: null,
@@ -552,10 +557,18 @@ function handleHook({ session, event, payload }) {
     case 'UserPromptSubmit':
       s.everWorked = true
       s.editsThisTurn = 0
+      s.askedThisTurn = false
+      s.reviewedThisTurn = false
+      s.discussNudged = false
       s.nudgedThisTurn = false
       if (payload.prompt) s.lastPrompt = String(payload.prompt).slice(0, 500)
       setStatus(s, 'working', '')
       break
+    case 'PreToolUse': {
+      const reason = EDIT_TOOLS.has(payload.tool_name) && collab.discussNudge(s)
+      if (reason) return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } }
+      break
+    }
     case 'PostToolUse':
       if (EDIT_TOOLS.has(payload.tool_name)) s.editsThisTurn++
       if (s.status === 'waiting') setStatus(s, 'working', '')

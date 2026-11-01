@@ -781,6 +781,7 @@ function fillCollabMenu() {
   $('collab-timeout').value = c.timeoutMin
   $('collab-open').checked = c.allowOpen
   $('collab-max-open').value = c.maxOpened
+  $('collab-discuss').checked = c.autoDiscuss
   $('collab-review').checked = c.autoReview
   $('collab-jev').checked = c.jev
   $('collab-jev-threshold').value = c.jevThreshold
@@ -806,6 +807,7 @@ async function saveCollab() {
     timeoutMin: $('collab-timeout').value,
     allowOpen: $('collab-open').checked,
     maxOpened: $('collab-max-open').value,
+    autoDiscuss: $('collab-discuss').checked,
     autoReview: $('collab-review').checked,
     jev: $('collab-jev').checked,
     jevThreshold: $('collab-jev-threshold').value,
@@ -813,7 +815,7 @@ async function saveCollab() {
   fillCollabMenu()
   renderCollabButton()
 }
-for (const id of ['collab-enabled', 'collab-asks', 'collab-depth', 'collab-timeout', 'collab-open', 'collab-max-open', 'collab-review', 'collab-jev', 'collab-jev-threshold'])
+for (const id of ['collab-enabled', 'collab-asks', 'collab-depth', 'collab-timeout', 'collab-open', 'collab-max-open', 'collab-discuss', 'collab-review', 'collab-jev', 'collab-jev-threshold'])
   $(id).addEventListener('change', saveCollab)
 $('jev-key').addEventListener('change', async () => {
   const key = $('jev-key').value.trim()

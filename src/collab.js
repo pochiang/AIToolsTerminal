@@ -18,7 +18,7 @@
 const path = require('path')
 const jev = require('./jev')
 
-const DEFAULTS = { enabled: true, maxAsksPerTurn: 3, maxDepth: 2, timeoutMin: 10, allowOpen: false, maxOpened: 2, jev: false, jevThreshold: 50, autoReview: true }
+const DEFAULTS = { enabled: true, maxAsksPerTurn: 3, maxDepth: 2, timeoutMin: 10, allowOpen: false, maxOpened: 2, jev: false, jevThreshold: 50, autoDiscuss: true, autoReview: true }
 const KIND_NAME = { claude: 'Claude Code', codex: 'Codex' }
 const STATUS_NAME = { working: '工作中', waiting: '等待中', done: '完成' }
 
@@ -113,6 +113,8 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf, spa
     if (target.dormant)
       return fail(`「${titleOf(target)}」尚未載入（使用者還沒切到該分頁），目前無法詢問。請改問其他對話或自行完成。`)
     s.asksThisTurn++
+    s.askedThisTurn = true // unlike the budget above, a mid-turn Enter doesn't clear it
+    const editsAtAsk = s.editsThisTurn
     if (L.jev) {
       const same = path.resolve(target.cwd).toLowerCase() === path.resolve(s.cwd).toLowerCase()
       const epoch = stops
@@ -139,7 +141,10 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf, spa
     update(s)
     update(target)
     try {
-      return await run(r, signal)
+      const result = await run(r, signal)
+      // Only an answered ask made after edits counts as their review.
+      if (editsAtAsk && !result.isError) s.reviewedThisTurn = true
+      return result
     } finally {
       requests.delete(r.id)
       s.waitingOn = null
@@ -268,6 +273,7 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf, spa
       maxOpened: n(next.maxOpened ?? c.maxOpened, 1, 5, c.maxOpened),
       jev: next.jev === undefined ? c.jev : !!next.jev,
       jevThreshold: n(next.jevThreshold ?? c.jevThreshold, 1, 99, c.jevThreshold),
+      autoDiscuss: next.autoDiscuss === undefined ? c.autoDiscuss : !!next.autoDiscuss,
       autoReview: next.autoReview === undefined ? c.autoReview : !!next.autoReview,
     }
     saveConfig()
@@ -276,28 +282,48 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf, spa
     return config.collab
   }
 
+  // Nudges apply to Claude turns the user started (not relayed asks), when there is someone to ask.
+  function canNudge(s, on) {
+    const L = limits()
+    if (!L.enabled || !on || s.kind !== 'claude' || s.serving) return false
+    return L.allowOpen || [...sessions.values()].some(o => o.id !== s.id && !o.exited && !o.dormant && o.kind !== 'shell')
+  }
+  const findHint = () =>
+    '用 list_sessions 找與你同資料夾的對話（優先選 Codex，不同模型更能抓到盲點）' +
+    (limits().allowOpen ? '，沒有合適的就用 open_session 開一個' : '')
+
   /**
-   * Stop-hook nudge: a turn the user started that edited files but asked no one
-   * gets sent back once to have another AI review it. Returns the reason, or null.
+   * PreToolUse nudge: the turn's first edit, with no one asked yet, is held back
+   * once so the plan gets discussed with another AI first. Returns the reason, or null.
+   */
+  function discussNudge(s) {
+    if (s.discussNudged || s.askedThisTurn || s.editsThisTurn || !canNudge(s, limits().autoDiscuss)) return null
+    s.discussNudged = true
+    send('collab:event', { title: titleOf(s), text: '要開始修改檔案但還沒和其他 AI 討論，已提醒它先討論方案。', note: true })
+    return (
+      '[AI Tools Terminal] 動手修改前，請先和另一個 AI 討論方案：' + findHint() +
+      '，再用 ask_session 說明任務背景、你打算怎麼改（哪些檔案、做法）、考慮過的替代方案與疑慮，請它提出意見或更好的做法。' +
+      '整合討論結果後再開始修改。如果這次修改確實很瑣碎（例如改字、改設定值），可以直接重試這個修改。'
+    )
+  }
+
+  /**
+   * Stop-hook nudge: a turn the user started that edited files without asking
+   * anyone afterwards gets sent back once to have another AI review it.
    */
   function reviewNudge(s) {
-    const L = limits()
-    if (!L.enabled || !L.autoReview || s.kind !== 'claude' || s.serving || s.nudgedThisTurn) return null
-    if (!s.editsThisTurn || s.asksThisTurn > 0) return null
-    const others = [...sessions.values()].some(o => o.id !== s.id && !o.exited && !o.dormant && o.kind !== 'shell')
-    if (!others && !L.allowOpen) return null
+    if (s.nudgedThisTurn || !s.editsThisTurn || s.reviewedThisTurn || !canNudge(s, limits().autoReview)) return null
     s.nudgedThisTurn = true
     send('collab:event', { title: titleOf(s), text: `這回合修改了 ${s.editsThisTurn} 次檔案但沒有請人審查，已提醒它交付前請另一個 AI 審查。`, note: true })
     return (
-      `[AI Tools Terminal] 你這回合修改了檔案（${s.editsThisTurn} 次），但還沒有請另一個 AI 審查。交付前請先這樣做：` +
-      '用 list_sessions 找與你同資料夾的對話（優先選 Codex，不同模型更能抓到盲點）' +
-      (L.allowOpen ? '，沒有合適的就用 open_session 開一個' : '') +
+      `[AI Tools Terminal] 你這回合修改了檔案（${s.editsThisTurn} 次），但改完後還沒有請另一個 AI 審查。交付前請先這樣做：` +
+      findHint() +
       '，再用 ask_session 請它審查這次的修改（附上改了哪些檔案、目的與你最擔心的地方）。收到回覆後整合結論再回覆使用者。' +
       '如果這次修改確實很瑣碎（例如改字、改設定值），可以略過審查直接結束，並在回覆中簡短說明為何略過。'
     )
   }
 
-  return { call, onDone, stopAll, describe, setLimits, reviewNudge, pending: () => requests.size }
+  return { call, onDone, stopAll, describe, setLimits, discussNudge, reviewNudge, pending: () => requests.size }
 }
 
 module.exports = { createCollab }
