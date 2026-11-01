@@ -66,6 +66,8 @@ npm run dist     # 產生 dist\AI-Tools-Terminal-Setup-<版本>.exe
 
 例如對 Claude 說「寫完後請用 ask_session 請 Codex review」。對方忙碌時會排隊，等它閒下來才送出。右側卡片會顯示 `⇄ 正在詢問…` 和 `⇄ 正在回覆…的請求`。
 
+不必每次都明講：「修改後提醒請另一個 AI 審查」（預設開）會在 Claude Code 的 Stop hook 檢查，你交辦的回合若用 Edit／Write 改了檔案、卻沒呼叫過 `ask_session`，就把回合退回一次，要它先請另一個 AI（優先 Codex）審查再回覆；瑣碎修改它可說明後略過。由 AI 轉來的請求不會被提醒。
+
 防止無限輪巡的限制（`src/collab.js`，由程式強制，AI 無法繞過；可在右上「⇄ 協作」調整）：
 
 | 限制 | 預設 | 說明 |

@@ -110,6 +110,11 @@
             <label class="num-row">AI 最多同時開<input type="number" id="collab-max-open" min="1" max="5" />個</label>
             <p class="hint">沒有可詢問的對話時，AI 可用 <code>open_session</code> 在背景開一個新頁籤（標上 [AI]，與發起方同資料夾）。每個新對話都會消耗用量。</p>
             <label class="switch-row">
+              <span>修改後提醒請另一個 AI 審查</span>
+              <input type="checkbox" role="switch" class="toggle" id="collab-review" />
+            </label>
+            <p class="hint">Claude Code 在你交辦的回合中改了檔案、卻沒有詢問其他對話時，結束前會被提醒一次，請另一個 AI（優先 Codex）審查。瑣碎的修改它可以略過。</p>
+            <label class="switch-row">
               <span>由 Jev 判斷是否需要協助</span>
               <input type="checkbox" role="switch" class="toggle" id="collab-jev" />
             </label>

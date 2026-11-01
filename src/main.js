@@ -354,6 +354,8 @@ function createSession(kind, cwd, cols, rows, restore = {}) {
     inputAt: 0,
     doneSeq: 0,
     asksThisTurn: 0,
+    editsThisTurn: 0,
+    nudgedThisTurn: false,
     serving: null,
     waitingOn: null,
     codex: kind === 'codex' ? { file: null, offset: 0, partial: '' } : null,
@@ -523,6 +525,8 @@ function watchCodexApproval(s, data) {
 
 // ---------- Claude hook server ----------
 
+const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
+
 function handleHook({ session, event, payload }) {
   const s = sessions.get(session)
   if (!s) return
@@ -547,10 +551,13 @@ function handleHook({ session, event, payload }) {
   switch (event) {
     case 'UserPromptSubmit':
       s.everWorked = true
+      s.editsThisTurn = 0
+      s.nudgedThisTurn = false
       if (payload.prompt) s.lastPrompt = String(payload.prompt).slice(0, 500)
       setStatus(s, 'working', '')
       break
     case 'PostToolUse':
+      if (EDIT_TOOLS.has(payload.tool_name)) s.editsThisTurn++
       if (s.status === 'waiting') setStatus(s, 'working', '')
       break
     case 'Notification': {
@@ -565,7 +572,11 @@ function handleHook({ session, event, payload }) {
       }
       break
     }
-    case 'Stop':
+    case 'Stop': {
+      // Edited files without a review: send the turn back once to ask another AI.
+      const reason = !payload.stop_hook_active && collab.reviewNudge(s)
+      if (reason) return { decision: 'block', reason }
+    }
       s.lastReply = payload.last_assistant_message || (payload.transcript_path && lastClaudeReply(payload.transcript_path)) || s.lastReply
       setStatus(s, 'done', '')
       break
@@ -589,10 +600,13 @@ function startHookServer() {
       req.on('end', async () => {
         if (url.pathname === '/hook') {
           // Claude hook: the session and event ride in the URL, the payload is the body.
-          res.writeHead(204).end()
+          // A returned object is the hook's JSON output (e.g. a Stop block).
           let payload = {}
           try { payload = JSON.parse(body) } catch {}
-          handleHook({ session: url.searchParams.get('session'), event: url.searchParams.get('event'), payload })
+          let out
+          try { out = handleHook({ session: url.searchParams.get('session'), event: url.searchParams.get('event'), payload }) } catch (e) { console.error('hook', e) }
+          if (out) res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(out))
+          else res.writeHead(204).end()
           return
         }
         let msg

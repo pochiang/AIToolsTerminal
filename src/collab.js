@@ -18,7 +18,7 @@
 const path = require('path')
 const jev = require('./jev')
 
-const DEFAULTS = { enabled: true, maxAsksPerTurn: 3, maxDepth: 2, timeoutMin: 10, allowOpen: false, maxOpened: 2, jev: false, jevThreshold: 50 }
+const DEFAULTS = { enabled: true, maxAsksPerTurn: 3, maxDepth: 2, timeoutMin: 10, allowOpen: false, maxOpened: 2, jev: false, jevThreshold: 50, autoReview: true }
 const KIND_NAME = { claude: 'Claude Code', codex: 'Codex' }
 const STATUS_NAME = { working: '工作中', waiting: '等待中', done: '完成' }
 
@@ -268,6 +268,7 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf, spa
       maxOpened: n(next.maxOpened ?? c.maxOpened, 1, 5, c.maxOpened),
       jev: next.jev === undefined ? c.jev : !!next.jev,
       jevThreshold: n(next.jevThreshold ?? c.jevThreshold, 1, 99, c.jevThreshold),
+      autoReview: next.autoReview === undefined ? c.autoReview : !!next.autoReview,
     }
     saveConfig()
     if (!config.collab.enabled) stopAll()
@@ -275,7 +276,28 @@ function createCollab({ sessions, config, saveConfig, send, update, titleOf, spa
     return config.collab
   }
 
-  return { call, onDone, stopAll, describe, setLimits, pending: () => requests.size }
+  /**
+   * Stop-hook nudge: a turn the user started that edited files but asked no one
+   * gets sent back once to have another AI review it. Returns the reason, or null.
+   */
+  function reviewNudge(s) {
+    const L = limits()
+    if (!L.enabled || !L.autoReview || s.kind !== 'claude' || s.serving || s.nudgedThisTurn) return null
+    if (!s.editsThisTurn || s.asksThisTurn > 0) return null
+    const others = [...sessions.values()].some(o => o.id !== s.id && !o.exited && !o.dormant && o.kind !== 'shell')
+    if (!others && !L.allowOpen) return null
+    s.nudgedThisTurn = true
+    send('collab:event', { title: titleOf(s), text: `這回合修改了 ${s.editsThisTurn} 次檔案但沒有請人審查，已提醒它交付前請另一個 AI 審查。`, note: true })
+    return (
+      `[AI Tools Terminal] 你這回合修改了檔案（${s.editsThisTurn} 次），但還沒有請另一個 AI 審查。交付前請先這樣做：` +
+      '用 list_sessions 找與你同資料夾的對話（優先選 Codex，不同模型更能抓到盲點）' +
+      (L.allowOpen ? '，沒有合適的就用 open_session 開一個' : '') +
+      '，再用 ask_session 請它審查這次的修改（附上改了哪些檔案、目的與你最擔心的地方）。收到回覆後整合結論再回覆使用者。' +
+      '如果這次修改確實很瑣碎（例如改字、改設定值），可以略過審查直接結束，並在回覆中簡短說明為何略過。'
+    )
+  }
+
+  return { call, onDone, stopAll, describe, setLimits, reviewNudge, pending: () => requests.size }
 }
 
 module.exports = { createCollab }
